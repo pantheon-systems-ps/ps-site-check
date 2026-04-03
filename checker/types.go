@@ -4,22 +4,23 @@ import "time"
 
 // Options configures the check behavior.
 type Options struct {
-	DoubleRequest bool // Make two requests to compare MISS→HIT
+	DoubleRequest   bool // Make two requests to compare MISS→HIT
 	FollowRedirects bool // Follow redirect chain
 }
 
 // Result is the top-level response from a site check.
 type Result struct {
-	ID            string          `json:"id"`
-	URL           string          `json:"url"`
-	Timestamp     time.Time       `json:"timestamp"`
-	DurationMS    int64           `json:"duration_ms"`
-	DNS           *DNSResult      `json:"dns"`
-	HTTP          *HTTPResult     `json:"http"`
-	SecondHTTP    *HTTPResult     `json:"second_http,omitempty"`
-	RedirectChain []RedirectHop   `json:"redirect_chain,omitempty"`
-	TLS           *TLSResult      `json:"tls"`
-	Insights      []Insight       `json:"insights"`
+	ID            string           `json:"id"`
+	URL           string           `json:"url"`
+	Timestamp     time.Time        `json:"timestamp"`
+	DurationMS    int64            `json:"duration_ms"`
+	DNS           *DNSResult       `json:"dns"`
+	DNSMulti      []DNSPathResult  `json:"dns_multi,omitempty"`
+	HTTP          *HTTPResult      `json:"http"`
+	SecondHTTP    *HTTPResult      `json:"second_http,omitempty"`
+	RedirectChain []RedirectHop    `json:"redirect_chain,omitempty"`
+	TLS           *TLSResult       `json:"tls"`
+	Insights      []Insight        `json:"insights"`
 }
 
 // DNSResult contains DNS resolution data.
@@ -27,6 +28,16 @@ type DNSResult struct {
 	A          []string `json:"a"`
 	AAAA       []string `json:"aaaa"`
 	CNAME      []string `json:"cname"`
+	DurationMS int64    `json:"duration_ms"`
+	Error      string   `json:"error,omitempty"`
+}
+
+// DNSPathResult contains DNS resolution via a specific resolver.
+type DNSPathResult struct {
+	Resolver   string   `json:"resolver"`
+	Label      string   `json:"label"`
+	A          []string `json:"a"`
+	AAAA       []string `json:"aaaa"`
 	DurationMS int64    `json:"duration_ms"`
 	Error      string   `json:"error,omitempty"`
 }
@@ -72,4 +83,17 @@ type Insight struct {
 	Severity string `json:"severity"` // "info", "warning", "error"
 	Category string `json:"category"` // "dns", "cache", "tls", "cdn", "security"
 	Message  string `json:"message"`
+}
+
+// BatchRequest is a list of URLs to check.
+type BatchRequest struct {
+	URLs    []string `json:"urls"`
+	Options Options  `json:"options"`
+}
+
+// BatchResult wraps multiple check results.
+type BatchResult struct {
+	Results    []*Result `json:"results"`
+	TotalMS    int64     `json:"total_ms"`
+	TotalURLs  int       `json:"total_urls"`
 }

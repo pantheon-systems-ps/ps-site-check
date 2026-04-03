@@ -39,15 +39,21 @@ func Run(rawURL string, opts Options) *Result {
 	start := time.Now()
 
 	var dnsResult *DNSResult
+	var dnsMulti []DNSPathResult
 	var httpResult *HTTPResult
 	var tlsResult *TLSResult
 
 	var wg sync.WaitGroup
-	wg.Add(3)
+	wg.Add(4)
 
 	go func() {
 		defer wg.Done()
 		dnsResult = checkDNS(hostname)
+	}()
+
+	go func() {
+		defer wg.Done()
+		dnsMulti = checkDNSMultiPath(hostname)
 	}()
 
 	go func() {
@@ -67,6 +73,7 @@ func Run(rawURL string, opts Options) *Result {
 		URL:       rawURL,
 		Timestamp: time.Now().UTC(),
 		DNS:       dnsResult,
+		DNSMulti:  dnsMulti,
 		HTTP:      httpResult,
 		TLS:       tlsResult,
 	}
@@ -83,9 +90,36 @@ func Run(rawURL string, opts Options) *Result {
 	}
 
 	result.DurationMS = time.Since(start).Milliseconds()
-	result.Insights = generateInsights(dnsResult, httpResult, result.SecondHTTP, tlsResult, result.RedirectChain)
+	result.Insights = generateInsights(dnsResult, dnsMulti, httpResult, result.SecondHTTP, tlsResult, result.RedirectChain)
 
 	return result
+}
+
+// RunBatch checks multiple URLs concurrently (max 10).
+func RunBatch(urls []string, opts Options) *BatchResult {
+	start := time.Now()
+
+	if len(urls) > 10 {
+		urls = urls[:10]
+	}
+
+	results := make([]*Result, len(urls))
+	var wg sync.WaitGroup
+
+	for i, u := range urls {
+		wg.Add(1)
+		go func(idx int, rawURL string) {
+			defer wg.Done()
+			results[idx] = Run(rawURL, opts)
+		}(i, u)
+	}
+	wg.Wait()
+
+	return &BatchResult{
+		Results:   results,
+		TotalMS:   time.Since(start).Milliseconds(),
+		TotalURLs: len(urls),
+	}
 }
 
 // normalizeURL ensures the URL has a scheme.

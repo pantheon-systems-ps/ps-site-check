@@ -8,15 +8,53 @@ import (
 )
 
 // generateInsights produces curated observations from the check results.
-func generateInsights(dns *DNSResult, http *HTTPResult, secondHTTP *HTTPResult, tls *TLSResult, redirectChain []RedirectHop) []Insight {
+func generateInsights(dns *DNSResult, dnsMulti []DNSPathResult, http *HTTPResult, secondHTTP *HTTPResult, tls *TLSResult, redirectChain []RedirectHop) []Insight {
 	var insights []Insight
 
 	insights = append(insights, dnsInsights(dns)...)
+	insights = append(insights, dnsMultiInsights(dnsMulti)...)
 	insights = append(insights, httpInsights(http)...)
 	insights = append(insights, doubleRequestInsights(http, secondHTTP)...)
 	insights = append(insights, redirectChainInsights(redirectChain)...)
 	insights = append(insights, tlsInsights(tls)...)
 	insights = append(insights, crossCheckInsights(dns, http, tls)...)
+
+	return insights
+}
+
+func dnsMultiInsights(results []DNSPathResult) []Insight {
+	if len(results) < 2 {
+		return nil
+	}
+
+	var insights []Insight
+
+	firstA := ""
+	consistent := true
+	for _, r := range results {
+		if r.Error != "" {
+			insights = append(insights, Insight{
+				Severity: "warning",
+				Category: "dns",
+				Message:  fmt.Sprintf("DNS resolution failed via %s: %s", r.Label, r.Error),
+			})
+			continue
+		}
+		joined := strings.Join(r.A, ",")
+		if firstA == "" {
+			firstA = joined
+		} else if joined != firstA {
+			consistent = false
+		}
+	}
+
+	if !consistent {
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "dns",
+			Message:  "DNS results differ across resolvers — may indicate recent DNS change or geo-routing",
+		})
+	}
 
 	return insights
 }

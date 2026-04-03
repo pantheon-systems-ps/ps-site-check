@@ -1,0 +1,26 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check:$COMMIT_SHA', '.']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check:$COMMIT_SHA']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ps-site-check'
+      - '--image=us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check:$COMMIT_SHA'
+      - '--region=us-east1'
+      - '--allow-unauthenticated'
+      - '--memory=256Mi'
+      - '--cpu=1'
+      - '--max-instances=3'
+      - '--min-instances=0'
+
+images:
+  - 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
