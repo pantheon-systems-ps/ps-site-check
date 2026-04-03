@@ -59,6 +59,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /check", withMiddleware(handleCheck))
 	mux.HandleFunc("POST /check-batch", withMiddleware(handleBatch))
+	mux.HandleFunc("POST /check-har", withMiddleware(handleHAR))
 	mux.HandleFunc("GET /result/{id}", handleResult)
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -161,6 +162,22 @@ func handleBatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+func handleHAR(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB max
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	analysis, err := checker.AnalyzeHAR(body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, analysis)
 }
 
 func handleResult(w http.ResponseWriter, r *http.Request) {
