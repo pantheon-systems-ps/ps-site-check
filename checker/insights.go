@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -12,12 +14,20 @@ func generateInsights(dns *DNSResult, http *HTTPResult, tls *TLSResult) []Insigh
 	insights = append(insights, dnsInsights(dns)...)
 	insights = append(insights, httpInsights(http)...)
 	insights = append(insights, tlsInsights(tls)...)
+	insights = append(insights, crossCheckInsights(dns, http, tls)...)
 
 	return insights
 }
 
 func dnsInsights(dns *DNSResult) []Insight {
 	if dns == nil || dns.Error != "" {
+		if dns != nil && dns.Error != "" {
+			return []Insight{{
+				Severity: "error",
+				Category: "dns",
+				Message:  "DNS resolution failed: " + dns.Error,
+			}}
+		}
 		return nil
 	}
 
@@ -39,15 +49,74 @@ func dnsInsights(dns *DNSResult) []Insight {
 		})
 	}
 
+	if len(dns.CNAME) > 0 {
+		cname := dns.CNAME[0]
+		switch {
+		case strings.HasSuffix(cname, ".fastly.net.") || strings.HasSuffix(cname, ".fastly.net"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "dns",
+				Message:  "CNAME points to Fastly (" + cname + ")",
+			})
+		case strings.HasSuffix(cname, ".pantheonsite.io.") || strings.HasSuffix(cname, ".pantheonsite.io"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "dns",
+				Message:  "CNAME points to Pantheon platform (" + cname + ")",
+			})
+		}
+	}
+
+	if dns.DurationMS > 1000 {
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "dns",
+			Message:  fmt.Sprintf("DNS resolution is slow (%dms) — may indicate DNS configuration issues", dns.DurationMS),
+		})
+	}
+
 	return insights
 }
 
 func httpInsights(http *HTTPResult) []Insight {
 	if http == nil || http.Error != "" {
+		if http != nil && http.Error != "" {
+			return []Insight{{
+				Severity: "error",
+				Category: "cdn",
+				Message:  "HTTP request failed: " + http.Error,
+			}}
+		}
 		return nil
 	}
 
 	var insights []Insight
+
+	// Status code
+	if http.StatusCode >= 500 {
+		insights = append(insights, Insight{
+			Severity: "error",
+			Category: "cdn",
+			Message:  "HTTP " + statusText(http.StatusCode) + " — server error",
+		})
+	} else if http.StatusCode >= 400 {
+		insights = append(insights, Insight{
+			Severity: "error",
+			Category: "cdn",
+			Message:  "HTTP " + statusText(http.StatusCode) + " — client error",
+		})
+	} else if http.StatusCode >= 300 {
+		location := http.Headers["location"]
+		msg := "HTTP " + statusText(http.StatusCode) + " — redirect detected"
+		if location != "" {
+			msg += " → " + location
+		}
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cdn",
+			Message:  msg,
+		})
+	}
 
 	// AGCDN detection
 	if _, ok := http.Headers["agcdn-info"]; ok {
@@ -64,14 +133,35 @@ func httpInsights(http *HTTPResult) []Insight {
 		})
 	}
 
+	// Pantheon platform detection
+	if backend, ok := http.Headers["pcontext-backend"]; ok {
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cdn",
+			Message:  "Pantheon platform detected — backend: " + backend,
+		})
+	}
+
+	// Fastly Image Optimization
+	if _, ok := http.Headers["fastly-io-info"]; ok {
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cdn",
+			Message:  "Fastly Image Optimization (IO) is enabled",
+		})
+	}
+
 	// Cache effectiveness
 	if xCache, ok := http.Headers["x-cache"]; ok {
 		parts := strings.Split(xCache, ",")
 		allMiss := true
+		allHit := true
 		for _, p := range parts {
-			if strings.TrimSpace(strings.ToUpper(p)) == "HIT" {
+			trimmed := strings.TrimSpace(strings.ToUpper(p))
+			if trimmed == "HIT" {
 				allMiss = false
-				break
+			} else {
+				allHit = false
 			}
 		}
 		if allMiss {
@@ -80,24 +170,66 @@ func httpInsights(http *HTTPResult) []Insight {
 				Category: "cache",
 				Message:  "All cache layers report MISS — content is not being served from cache",
 			})
+		} else if allHit {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  "Full cache HIT across all layers — optimal caching",
+			})
 		}
 	}
 
-	// Cache-Control issues
+	// Cache-Control analysis
 	if cc, ok := http.Headers["cache-control"]; ok {
 		lower := strings.ToLower(cc)
-		if strings.Contains(lower, "no-store") || strings.Contains(lower, "private") {
+		if strings.Contains(lower, "no-store") {
 			insights = append(insights, Insight{
 				Severity: "warning",
 				Category: "cache",
-				Message:  "Cache-Control prevents CDN caching (" + cc + ")",
+				Message:  "Cache-Control: no-store — content will never be cached",
+			})
+		} else if strings.Contains(lower, "private") {
+			insights = append(insights, Insight{
+				Severity: "warning",
+				Category: "cache",
+				Message:  "Cache-Control: private — CDN cannot cache this response",
+			})
+		} else if strings.Contains(lower, "no-cache") {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  "Cache-Control: no-cache — CDN must revalidate before serving cached copy",
 			})
 		}
 		if strings.Contains(lower, "max-age=0") {
 			insights = append(insights, Insight{
 				Severity: "warning",
 				Category: "cache",
-				Message:  "max-age=0 forces revalidation on every request",
+				Message:  "max-age=0 — forces revalidation on every request",
+			})
+		}
+		if strings.Contains(lower, "s-maxage") {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  "s-maxage present — CDN has a separate TTL from browser cache",
+			})
+		}
+	} else {
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "cache",
+			Message:  "No Cache-Control header — caching behavior depends on CDN defaults",
+		})
+	}
+
+	// Age header analysis
+	if ageStr, ok := http.Headers["age"]; ok {
+		if age, err := strconv.Atoi(ageStr); err == nil && age > 86400 {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  fmt.Sprintf("Object has been cached for %s — long-lived cache entry", humanDuration(age)),
 			})
 		}
 	}
@@ -108,7 +240,7 @@ func httpInsights(http *HTTPResult) []Insight {
 			insights = append(insights, Insight{
 				Severity: "warning",
 				Category: "cache",
-				Message:  "Vary includes Cookie — may significantly reduce cache hit ratio",
+				Message:  "Vary includes Cookie — requests with different cookies are cached separately, reducing hit ratio",
 			})
 		}
 	}
@@ -122,27 +254,55 @@ func httpInsights(http *HTTPResult) []Insight {
 		})
 	}
 
-	// Security headers
-	if _, ok := http.Headers["strict-transport-security"]; !ok {
+	// Surrogate-Key / cache tags
+	if sk, ok := http.Headers["surrogate-key"]; ok {
+		count := len(strings.Fields(sk))
 		insights = append(insights, Insight{
 			Severity: "info",
-			Category: "security",
-			Message:  "No Strict-Transport-Security header — consider adding HSTS",
+			Category: "cache",
+			Message:  fmt.Sprintf("Surrogate-Key present with %d cache tags — supports targeted purging", count),
 		})
 	}
 
-	// Status code
-	if http.StatusCode >= 400 {
+	// Security headers
+	if _, ok := http.Headers["strict-transport-security"]; !ok {
 		insights = append(insights, Insight{
-			Severity: "error",
-			Category: "cdn",
-			Message:  "HTTP " + strings.TrimSpace(statusText(http.StatusCode)) + " — site returned an error",
+			Severity: "warning",
+			Category: "security",
+			Message:  "No Strict-Transport-Security (HSTS) header — browsers may allow HTTP connections",
 		})
-	} else if http.StatusCode >= 300 {
+	} else if hsts := http.Headers["strict-transport-security"]; strings.Contains(hsts, "max-age=300") {
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "security",
+			Message:  "HSTS max-age is only 300s (5 min) — too short for production, consider 31536000 (1 year)",
+		})
+	}
+
+	if _, ok := http.Headers["x-frame-options"]; !ok {
+		if _, ok2 := http.Headers["content-security-policy"]; !ok2 {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "security",
+				Message:  "No X-Frame-Options or CSP frame-ancestors — page may be embeddable in iframes",
+			})
+		}
+	}
+
+	if _, ok := http.Headers["x-content-type-options"]; !ok {
 		insights = append(insights, Insight{
 			Severity: "info",
+			Category: "security",
+			Message:  "No X-Content-Type-Options header — consider adding 'nosniff'",
+		})
+	}
+
+	// Slow response
+	if http.DurationMS > 3000 {
+		insights = append(insights, Insight{
+			Severity: "warning",
 			Category: "cdn",
-			Message:  "HTTP " + strings.TrimSpace(statusText(http.StatusCode)) + " — redirect detected",
+			Message:  fmt.Sprintf("Slow HTTP response (%dms) — may indicate origin performance issues", http.DurationMS),
 		})
 	}
 
@@ -163,7 +323,7 @@ func tlsInsights(tls *TLSResult) []Insight {
 
 	var insights []Insight
 
-	// Check certificate expiry
+	// Certificate expiry
 	if tls.ValidTo != "" {
 		expiry, err := time.Parse(time.RFC3339, tls.ValidTo)
 		if err == nil {
@@ -172,25 +332,102 @@ func tlsInsights(tls *TLSResult) []Insight {
 				insights = append(insights, Insight{
 					Severity: "error",
 					Category: "tls",
-					Message:  "TLS certificate has expired",
+					Message:  "TLS certificate has EXPIRED",
 				})
-			} else if daysUntilExpiry < 14 {
+			} else if daysUntilExpiry < 7 {
+				insights = append(insights, Insight{
+					Severity: "error",
+					Category: "tls",
+					Message:  fmt.Sprintf("TLS certificate expires in %d days — renewal is critical", daysUntilExpiry),
+				})
+			} else if daysUntilExpiry < 30 {
 				insights = append(insights, Insight{
 					Severity: "warning",
 					Category: "tls",
-					Message:  "TLS certificate expires in " + strings.TrimSpace(pluralize(daysUntilExpiry, "day")),
+					Message:  fmt.Sprintf("TLS certificate expires in %d days — renewal should happen soon", daysUntilExpiry),
+				})
+			} else {
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "tls",
+					Message:  fmt.Sprintf("TLS certificate valid for %d more days", daysUntilExpiry),
 				})
 			}
 		}
 	}
 
 	// TLS version
-	if tls.Protocol == "TLS 1.0" || tls.Protocol == "TLS 1.1" {
+	switch tls.Protocol {
+	case "TLS 1.0", "TLS 1.1":
 		insights = append(insights, Insight{
-			Severity: "warning",
+			Severity: "error",
 			Category: "tls",
-			Message:  "Using deprecated " + tls.Protocol + " — should be TLS 1.2 or higher",
+			Message:  "Using deprecated " + tls.Protocol + " — must upgrade to TLS 1.2+",
 		})
+	case "TLS 1.3":
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "tls",
+			Message:  "TLS 1.3 — latest protocol with best performance and security",
+		})
+	}
+
+	// Certificate issuer analysis
+	if tls.Issuer != "" {
+		issuerLower := strings.ToLower(tls.Issuer)
+		switch {
+		case strings.Contains(issuerLower, "let's encrypt"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "tls",
+				Message:  "Certificate issued by Let's Encrypt (auto-renewable, 90-day validity)",
+			})
+		case strings.Contains(issuerLower, "globalsign"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "tls",
+				Message:  "Certificate issued by GlobalSign (Fastly managed TLS)",
+			})
+		case strings.Contains(issuerLower, "certainly"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "tls",
+				Message:  "Certificate issued by Certainly (Fastly's CA)",
+			})
+		}
+	}
+
+	return insights
+}
+
+// crossCheckInsights detects patterns across DNS, HTTP, and TLS results.
+func crossCheckInsights(dns *DNSResult, http *HTTPResult, tls *TLSResult) []Insight {
+	var insights []Insight
+
+	// Check if site is on Pantheon but not using AGCDN
+	if http != nil && http.Error == "" {
+		_, hasStyx := http.Headers["x-pantheon-styx-hostname"]
+		_, hasAGCDN := http.Headers["agcdn-info"]
+		if hasStyx && !hasAGCDN {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cdn",
+				Message:  "Site is on Pantheon (Styx edge detected) but not using AGCDN — using GCDN",
+			})
+		}
+	}
+
+	// Check for HTTPS enforcement
+	if http != nil && http.Error == "" {
+		if enforce, ok := http.Headers["pcontext-enforce-https"]; ok {
+			if enforce == "transitional" {
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "security",
+					Message:  "HTTPS enforcement is transitional — consider switching to full enforcement",
+				})
+			}
+		}
 	}
 
 	return insights
@@ -206,44 +443,39 @@ func statusText(code int) string {
 		return "302 Found"
 	case 304:
 		return "304 Not Modified"
+	case 307:
+		return "307 Temporary Redirect"
+	case 308:
+		return "308 Permanent Redirect"
+	case 400:
+		return "400 Bad Request"
+	case 401:
+		return "401 Unauthorized"
 	case 403:
 		return "403 Forbidden"
 	case 404:
 		return "404 Not Found"
+	case 429:
+		return "429 Too Many Requests"
 	case 500:
 		return "500 Internal Server Error"
 	case 502:
 		return "502 Bad Gateway"
 	case 503:
 		return "503 Service Unavailable"
+	case 504:
+		return "504 Gateway Timeout"
 	default:
-		return string(rune(code/100+'0')) + "xx"
+		return fmt.Sprintf("%d", code)
 	}
 }
 
-func pluralize(n int, word string) string {
-	if n == 1 {
-		return "1 " + word
+func humanDuration(seconds int) string {
+	if seconds < 3600 {
+		return fmt.Sprintf("%d minutes", seconds/60)
 	}
-	return strings.TrimSpace(intToStr(n)) + " " + word + "s"
-}
-
-func intToStr(n int) string {
-	if n == 0 {
-		return "0"
+	if seconds < 86400 {
+		return fmt.Sprintf("%.1f hours", float64(seconds)/3600)
 	}
-	s := ""
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	for n > 0 {
-		s = string(rune('0'+n%10)) + s
-		n /= 10
-	}
-	if neg {
-		s = "-" + s
-	}
-	return s
+	return fmt.Sprintf("%.1f days", float64(seconds)/86400)
 }

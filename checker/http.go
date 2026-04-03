@@ -32,6 +32,15 @@ var agcdnHeaders = []string{
 	"x-frame-options",
 	"strict-transport-security",
 	"content-security-policy",
+	"x-content-type-options",
+	"fastly-debug-path",
+	"fastly-debug-ttl",
+	"pcontext-backend",
+	"pcontext-enforce-https",
+	"pcontext-platform",
+	"policy-doc-cache",
+	"location",
+	"x-req-md-lookup-count",
 }
 
 // checkHTTP performs an HTTP GET with debug headers and extracts response data.
@@ -144,9 +153,68 @@ func headerInsight(header, value string) string {
 		return "CDN-level cache control directive"
 	case "surrogate-key":
 		return "Cache tags for targeted purging"
+	case "x-content-type-options":
+		if lower == "nosniff" {
+			return "Browser MIME-type sniffing is disabled (good)"
+		}
+		return ""
+	case "x-frame-options":
+		return xFrameInsight(lower)
+	case "content-security-policy":
+		return "Content Security Policy is configured"
+	case "fastly-debug-path":
+		return "Fastly debug: request path through cache nodes"
+	case "fastly-debug-ttl":
+		return "Fastly debug: TTL and cache state per node"
+	case "pcontext-backend":
+		return "Pantheon backend routing: " + value
+	case "pcontext-enforce-https":
+		if lower == "full" {
+			return "Full HTTPS enforcement enabled"
+		}
+		return "HTTPS enforcement: " + value
+	case "pcontext-platform":
+		return "Pantheon platform: " + value
+	case "policy-doc-cache":
+		if strings.EqualFold(value, "HIT") {
+			return "Policy doc served from cache"
+		}
+		return "Policy doc cache: " + value
+	case "location":
+		return "Redirect target: " + value
+	case "x-req-md-lookup-count":
+		return "Request metadata lookups performed: " + value
+	case "set-cookie":
+		return "Session cookie is being set — may affect cacheability"
+	case "x-timer":
+		return xTimerInsight(value)
 	}
 
 	return ""
+}
+
+func xFrameInsight(value string) string {
+	switch {
+	case strings.Contains(value, "deny"):
+		return "Page cannot be displayed in any iframe"
+	case strings.Contains(value, "sameorigin"):
+		return "Page can only be iframed by same origin"
+	default:
+		return ""
+	}
+}
+
+func xTimerInsight(value string) string {
+	// Format: S1234567890.123456,VS0,VE10
+	parts := strings.Split(value, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if strings.HasPrefix(p, "VE") {
+			ms := strings.TrimPrefix(p, "VE")
+			return "Fastly origin fetch time: " + ms + "ms"
+		}
+	}
+	return "Fastly timing data"
 }
 
 func xCacheInsight(value string) string {
