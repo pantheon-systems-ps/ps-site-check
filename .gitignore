@@ -1,0 +1,5 @@
+site-check
+*.exe
+*.test
+*.out
+.env
