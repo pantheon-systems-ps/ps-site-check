@@ -2,15 +2,24 @@ package checker
 
 import "time"
 
+// Options configures the check behavior.
+type Options struct {
+	DoubleRequest bool // Make two requests to compare MISS→HIT
+	FollowRedirects bool // Follow redirect chain
+}
+
 // Result is the top-level response from a site check.
 type Result struct {
-	URL        string     `json:"url"`
-	Timestamp  time.Time  `json:"timestamp"`
-	DurationMS int64      `json:"duration_ms"`
-	DNS        *DNSResult `json:"dns"`
-	HTTP       *HTTPResult `json:"http"`
-	TLS        *TLSResult  `json:"tls"`
-	Insights   []Insight   `json:"insights"`
+	ID            string          `json:"id"`
+	URL           string          `json:"url"`
+	Timestamp     time.Time       `json:"timestamp"`
+	DurationMS    int64           `json:"duration_ms"`
+	DNS           *DNSResult      `json:"dns"`
+	HTTP          *HTTPResult     `json:"http"`
+	SecondHTTP    *HTTPResult     `json:"second_http,omitempty"`
+	RedirectChain []RedirectHop   `json:"redirect_chain,omitempty"`
+	TLS           *TLSResult      `json:"tls"`
+	Insights      []Insight       `json:"insights"`
 }
 
 // DNSResult contains DNS resolution data.
@@ -24,11 +33,11 @@ type DNSResult struct {
 
 // HTTPResult contains the HTTP response data.
 type HTTPResult struct {
-	StatusCode   int            `json:"status_code"`
+	StatusCode   int               `json:"status_code"`
 	Headers      map[string]string `json:"headers"`
-	AGCDNHeaders []AGCDNHeader  `json:"agcdn_headers"`
-	DurationMS   int64          `json:"duration_ms"`
-	Error        string         `json:"error,omitempty"`
+	AGCDNHeaders []AGCDNHeader     `json:"agcdn_headers"`
+	DurationMS   int64             `json:"duration_ms"`
+	Error        string            `json:"error,omitempty"`
 }
 
 // AGCDNHeader is a curated header with insight commentary.
@@ -48,6 +57,14 @@ type TLSResult struct {
 	SANs       []string `json:"sans"`
 	DurationMS int64    `json:"duration_ms"`
 	Error      string   `json:"error,omitempty"`
+}
+
+// RedirectHop represents one step in a redirect chain.
+type RedirectHop struct {
+	URL        string `json:"url"`
+	StatusCode int    `json:"status_code"`
+	Location   string `json:"location"`
+	DurationMS int64  `json:"duration_ms"`
 }
 
 // Insight is a curated observation about the site.

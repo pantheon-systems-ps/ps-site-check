@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"crypto/rand"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -8,11 +10,12 @@ import (
 )
 
 // Run executes all checks against the given URL and returns the result.
-func Run(rawURL string) *Result {
+func Run(rawURL string, opts Options) *Result {
 	rawURL = normalizeURL(rawURL)
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return &Result{
+			ID:        generateID(),
 			URL:       rawURL,
 			Timestamp: time.Now().UTC(),
 			Insights: []Insight{{
@@ -59,18 +62,30 @@ func Run(rawURL string) *Result {
 
 	wg.Wait()
 
-	duration := time.Since(start)
-	insights := generateInsights(dnsResult, httpResult, tlsResult)
-
-	return &Result{
-		URL:        rawURL,
-		Timestamp:  time.Now().UTC(),
-		DurationMS: duration.Milliseconds(),
-		DNS:        dnsResult,
-		HTTP:       httpResult,
-		TLS:        tlsResult,
-		Insights:   insights,
+	result := &Result{
+		ID:        generateID(),
+		URL:       rawURL,
+		Timestamp: time.Now().UTC(),
+		DNS:       dnsResult,
+		HTTP:      httpResult,
+		TLS:       tlsResult,
 	}
+
+	// Double-request mode: second request after 2s to compare MISS→HIT
+	if opts.DoubleRequest && httpResult != nil && httpResult.Error == "" {
+		time.Sleep(2 * time.Second)
+		result.SecondHTTP = checkHTTP(rawURL)
+	}
+
+	// Redirect chain tracing
+	if opts.FollowRedirects && httpResult != nil && httpResult.StatusCode >= 300 && httpResult.StatusCode < 400 {
+		result.RedirectChain = traceRedirects(rawURL)
+	}
+
+	result.DurationMS = time.Since(start).Milliseconds()
+	result.Insights = generateInsights(dnsResult, httpResult, result.SecondHTTP, tlsResult, result.RedirectChain)
+
+	return result
 }
 
 // normalizeURL ensures the URL has a scheme.
@@ -80,4 +95,11 @@ func normalizeURL(rawURL string) string {
 		rawURL = "https://" + rawURL
 	}
 	return rawURL
+}
+
+// generateID creates a short unique ID for result permalinks.
+func generateID() string {
+	b := make([]byte, 8)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }

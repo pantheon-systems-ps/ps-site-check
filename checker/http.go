@@ -292,3 +292,60 @@ func hSTSInsight(value string) string {
 	}
 	return ""
 }
+
+// traceRedirects follows a redirect chain up to 10 hops.
+func traceRedirects(startURL string) []RedirectHop {
+	var chain []RedirectHop
+	currentURL := startURL
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	for i := 0; i < 10; i++ {
+		start := time.Now()
+		req, err := http.NewRequest("GET", currentURL, nil)
+		if err != nil {
+			break
+		}
+		req.Header.Set("User-Agent", "ps-site-check/1.0")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			break
+		}
+		resp.Body.Close()
+
+		location := resp.Header.Get("Location")
+		chain = append(chain, RedirectHop{
+			URL:        currentURL,
+			StatusCode: resp.StatusCode,
+			Location:   location,
+			DurationMS: time.Since(start).Milliseconds(),
+		})
+
+		if resp.StatusCode < 300 || resp.StatusCode >= 400 || location == "" {
+			break // Not a redirect, chain ends
+		}
+
+		// Resolve relative redirects
+		if !strings.HasPrefix(location, "http") {
+			parsed, err := resp.Request.URL.Parse(location)
+			if err != nil {
+				break
+			}
+			location = parsed.String()
+		}
+		currentURL = location
+	}
+
+	return chain
+}

@@ -8,13 +8,120 @@ import (
 )
 
 // generateInsights produces curated observations from the check results.
-func generateInsights(dns *DNSResult, http *HTTPResult, tls *TLSResult) []Insight {
+func generateInsights(dns *DNSResult, http *HTTPResult, secondHTTP *HTTPResult, tls *TLSResult, redirectChain []RedirectHop) []Insight {
 	var insights []Insight
 
 	insights = append(insights, dnsInsights(dns)...)
 	insights = append(insights, httpInsights(http)...)
+	insights = append(insights, doubleRequestInsights(http, secondHTTP)...)
+	insights = append(insights, redirectChainInsights(redirectChain)...)
 	insights = append(insights, tlsInsights(tls)...)
 	insights = append(insights, crossCheckInsights(dns, http, tls)...)
+
+	return insights
+}
+
+func doubleRequestInsights(first *HTTPResult, second *HTTPResult) []Insight {
+	if first == nil || second == nil || first.Error != "" || second.Error != "" {
+		return nil
+	}
+
+	var insights []Insight
+
+	firstCache := first.Headers["x-cache"]
+	secondCache := second.Headers["x-cache"]
+
+	if firstCache != "" && secondCache != "" {
+		firstHasHit := strings.Contains(strings.ToUpper(firstCache), "HIT")
+		secondHasHit := strings.Contains(strings.ToUpper(secondCache), "HIT")
+
+		if !firstHasHit && secondHasHit {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  "Cache is working: first request was MISS, second request was HIT after 2s delay",
+			})
+		} else if !firstHasHit && !secondHasHit {
+			insights = append(insights, Insight{
+				Severity: "warning",
+				Category: "cache",
+				Message:  "Cache may not be working: both requests returned MISS — content is not being cached",
+			})
+		} else if firstHasHit && secondHasHit {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  "Both requests returned HIT — content is well-cached",
+			})
+		}
+	}
+
+	// Compare response times
+	if second.DurationMS > 0 && first.DurationMS > 0 {
+		if first.DurationMS > 500 && second.DurationMS < first.DurationMS/2 {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  fmt.Sprintf("Second request was %dx faster (%dms vs %dms) — cache acceleration confirmed", first.DurationMS/second.DurationMS, second.DurationMS, first.DurationMS),
+			})
+		}
+	}
+
+	return insights
+}
+
+func redirectChainInsights(chain []RedirectHop) []Insight {
+	if len(chain) == 0 {
+		return nil
+	}
+
+	var insights []Insight
+
+	if len(chain) > 5 {
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "cdn",
+			Message:  fmt.Sprintf("Long redirect chain (%d hops) — may impact performance", len(chain)),
+		})
+	}
+
+	// Check for HTTP→HTTPS redirect
+	if len(chain) >= 2 && strings.HasPrefix(chain[0].URL, "http://") {
+		for _, hop := range chain[1:] {
+			if strings.HasPrefix(hop.URL, "https://") {
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "security",
+					Message:  "HTTP→HTTPS redirect detected in chain",
+				})
+				break
+			}
+		}
+	}
+
+	// Check for redirect loop indicators
+	seen := make(map[string]bool)
+	for _, hop := range chain {
+		if seen[hop.URL] {
+			insights = append(insights, Insight{
+				Severity: "error",
+				Category: "cdn",
+				Message:  "Redirect loop detected: " + hop.URL + " appears multiple times",
+			})
+			break
+		}
+		seen[hop.URL] = true
+	}
+
+	// Show final destination
+	last := chain[len(chain)-1]
+	if last.StatusCode >= 200 && last.StatusCode < 300 {
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cdn",
+			Message:  fmt.Sprintf("Redirect chain resolved to %s (HTTP %d) after %d hops", last.URL, last.StatusCode, len(chain)-1),
+		})
+	}
 
 	return insights
 }
