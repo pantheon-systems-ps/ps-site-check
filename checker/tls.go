@@ -20,7 +20,10 @@ func checkTLS(hostname, port string, opts Options) *TLSResult {
 
 	if opts.ResolveIP != "" {
 		dialTarget = net.JoinHostPort(opts.ResolveIP, port)
-		tlsConfig.ServerName = hostname // Keep SNI correct
+		tlsConfig.ServerName = hostname
+		// Skip verification so we can inspect whatever cert the IP serves,
+		// even if it doesn't match the hostname (diagnostic use case).
+		tlsConfig.InsecureSkipVerify = true
 	}
 
 	conn, err := tls.DialWithDialer(

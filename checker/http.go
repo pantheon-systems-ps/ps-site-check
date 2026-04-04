@@ -65,6 +65,10 @@ func checkHTTP(url, hostname string, opts Options) *HTTPResult {
 			)
 		}
 		transport.TLSClientConfig.ServerName = hostname
+		// Skip cert verification when resolve override is active — the whole point
+		// is diagnostic: see what certificate the target IP serves, even if it
+		// doesn't match the hostname (e.g., Fastly default SNI cert).
+		transport.TLSClientConfig.InsecureSkipVerify = true
 	}
 
 	client := &http.Client{
@@ -333,6 +337,7 @@ func traceRedirects(startURL, hostname string, opts Options) []RedirectHop {
 			)
 		}
 		transport.TLSClientConfig.ServerName = hostname
+		transport.TLSClientConfig.InsecureSkipVerify = true
 	}
 
 	client := &http.Client{
