@@ -58,12 +58,12 @@ func Run(rawURL string, opts Options) *Result {
 
 	go func() {
 		defer wg.Done()
-		httpResult = checkHTTP(rawURL)
+		httpResult = checkHTTP(rawURL, hostname, opts)
 	}()
 
 	go func() {
 		defer wg.Done()
-		tlsResult = checkTLS(hostname, port)
+		tlsResult = checkTLS(hostname, port, opts)
 	}()
 
 	wg.Wait()
@@ -71,6 +71,7 @@ func Run(rawURL string, opts Options) *Result {
 	result := &Result{
 		ID:        generateID(),
 		URL:       rawURL,
+		ResolveIP: opts.ResolveIP,
 		Timestamp: time.Now().UTC(),
 		DNS:       dnsResult,
 		DNSMulti:  dnsMulti,
@@ -81,16 +82,16 @@ func Run(rawURL string, opts Options) *Result {
 	// Double-request mode: second request after 2s to compare MISS→HIT
 	if opts.DoubleRequest && httpResult != nil && httpResult.Error == "" {
 		time.Sleep(2 * time.Second)
-		result.SecondHTTP = checkHTTP(rawURL)
+		result.SecondHTTP = checkHTTP(rawURL, hostname, opts)
 	}
 
 	// Redirect chain tracing
 	if opts.FollowRedirects && httpResult != nil && httpResult.StatusCode >= 300 && httpResult.StatusCode < 400 {
-		result.RedirectChain = traceRedirects(rawURL)
+		result.RedirectChain = traceRedirects(rawURL, hostname, opts)
 	}
 
 	result.DurationMS = time.Since(start).Milliseconds()
-	result.Insights = generateInsights(dnsResult, dnsMulti, httpResult, result.SecondHTTP, tlsResult, result.RedirectChain)
+	result.Insights = generateInsights(dnsResult, dnsMulti, httpResult, result.SecondHTTP, tlsResult, result.RedirectChain, opts.ResolveIP)
 
 	return result
 }

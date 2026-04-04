@@ -8,8 +8,16 @@ import (
 )
 
 // generateInsights produces curated observations from the check results.
-func generateInsights(dns *DNSResult, dnsMulti []DNSPathResult, http *HTTPResult, secondHTTP *HTTPResult, tls *TLSResult, redirectChain []RedirectHop) []Insight {
+func generateInsights(dns *DNSResult, dnsMulti []DNSPathResult, http *HTTPResult, secondHTTP *HTTPResult, tls *TLSResult, redirectChain []RedirectHop, resolveIP string) []Insight {
 	var insights []Insight
+
+	if resolveIP != "" {
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cdn",
+			Message:  "Resolve override active — HTTP and TLS requests directed to " + resolveIP + " (DNS results show actual resolution)",
+		})
+	}
 
 	insights = append(insights, dnsInsights(dns)...)
 	insights = append(insights, dnsMultiInsights(dnsMulti)...)

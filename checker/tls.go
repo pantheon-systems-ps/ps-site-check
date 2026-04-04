@@ -9,16 +9,25 @@ import (
 )
 
 // checkTLS connects to the host and inspects the TLS certificate.
-func checkTLS(hostname, port string) *TLSResult {
+// When opts.ResolveIP is set, connects to that IP with correct SNI.
+func checkTLS(hostname, port string, opts Options) *TLSResult {
 	start := time.Now()
+
+	dialTarget := net.JoinHostPort(hostname, port)
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	if opts.ResolveIP != "" {
+		dialTarget = net.JoinHostPort(opts.ResolveIP, port)
+		tlsConfig.ServerName = hostname // Keep SNI correct
+	}
 
 	conn, err := tls.DialWithDialer(
 		&net.Dialer{Timeout: 5 * time.Second},
 		"tcp",
-		net.JoinHostPort(hostname, port),
-		&tls.Config{
-			MinVersion: tls.VersionTLS12,
-		},
+		dialTarget,
+		tlsConfig,
 	)
 	if err != nil {
 		return &TLSResult{

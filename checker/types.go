@@ -4,14 +4,18 @@ import "time"
 
 // Options configures the check behavior.
 type Options struct {
-	DoubleRequest   bool // Make two requests to compare MISS→HIT
-	FollowRedirects bool // Follow redirect chain
+	DoubleRequest   bool   // Make two requests to compare MISS→HIT
+	FollowRedirects bool   // Follow redirect chain
+	ResolveIP       string // Force-resolve HTTP/TLS to this IP (like curl --resolve)
+	PantheonDebug   bool   // Send Pantheon-Debug: 1 header
+	FastlyDebug     bool   // Send Fastly-Debug: 1 header
 }
 
 // Result is the top-level response from a site check.
 type Result struct {
 	ID            string           `json:"id"`
 	URL           string           `json:"url"`
+	ResolveIP     string           `json:"resolve_ip,omitempty"`
 	Timestamp     time.Time        `json:"timestamp"`
 	DurationMS    int64            `json:"duration_ms"`
 	DNS           *DNSResult       `json:"dns"`

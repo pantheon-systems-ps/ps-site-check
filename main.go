@@ -118,20 +118,43 @@ func withMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // --- Handlers ---
 
 func handleCheck(w http.ResponseWriter, r *http.Request) {
-	url := r.URL.Query().Get("url")
-	if url == "" {
+	q := r.URL.Query()
+	rawURL := q.Get("url")
+	if rawURL == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": "missing required parameter: url",
 		})
 		return
 	}
 
-	opts := checker.Options{
-		DoubleRequest:   r.URL.Query().Get("double") == "true",
-		FollowRedirects: r.URL.Query().Get("follow") == "true",
+	// Validate resolve IP (SSRF prevention)
+	resolve := q.Get("resolve")
+	if resolve != "" {
+		if errMsg := checker.ValidateResolveIP(resolve); errMsg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": errMsg,
+			})
+			return
+		}
 	}
 
-	result := checker.Run(url, opts)
+	// Debug headers: backward compatible — both default to true when neither is specified.
+	// When at least one is explicitly provided, use the explicit values.
+	pantheonDebug, fastlyDebug := true, true
+	if q.Has("debug") || q.Has("fdebug") {
+		pantheonDebug = q.Get("debug") == "true"
+		fastlyDebug = q.Get("fdebug") == "true"
+	}
+
+	opts := checker.Options{
+		DoubleRequest:   q.Get("double") == "true",
+		FollowRedirects: q.Get("follow") == "true",
+		ResolveIP:       resolve,
+		PantheonDebug:   pantheonDebug,
+		FastlyDebug:     fastlyDebug,
+	}
+
+	result := checker.Run(rawURL, opts)
 	cacheResult(result)
 	writeJSON(w, http.StatusOK, result)
 }

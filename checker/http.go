@@ -1,7 +1,9 @@
 package checker
 
 import (
+	"context"
 	"crypto/tls"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -43,17 +45,31 @@ var agcdnHeaders = []string{
 	"x-req-md-lookup-count",
 }
 
-// checkHTTP performs an HTTP GET with debug headers and extracts response data.
-func checkHTTP(url string) *HTTPResult {
+// checkHTTP performs an HTTP GET and extracts response data.
+// When opts.ResolveIP is set, connects to that IP instead of DNS.
+// Debug headers are sent based on opts.PantheonDebug and opts.FastlyDebug.
+func checkHTTP(url, hostname string, opts Options) *HTTPResult {
 	start := time.Now()
 
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
 		},
+	}
+
+	if opts.ResolveIP != "" {
+		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			_, port, _ := net.SplitHostPort(addr)
+			return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(
+				ctx, network, net.JoinHostPort(opts.ResolveIP, port),
+			)
+		}
+		transport.TLSClientConfig.ServerName = hostname
+	}
+
+	client := &http.Client{
+		Timeout:   15 * time.Second,
+		Transport: transport,
 		// Don't follow redirects — we want to see the first response
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -65,9 +81,13 @@ func checkHTTP(url string) *HTTPResult {
 		return &HTTPResult{Error: "failed to create request: " + err.Error()}
 	}
 
-	// Debug headers for Pantheon/Fastly
-	req.Header.Set("Pantheon-Debug", "1")
-	req.Header.Set("Fastly-Debug", "1")
+	// Conditional debug headers
+	if opts.PantheonDebug {
+		req.Header.Set("Pantheon-Debug", "1")
+	}
+	if opts.FastlyDebug {
+		req.Header.Set("Fastly-Debug", "1")
+	}
 	req.Header.Set("User-Agent", "ps-site-check/1.0")
 
 	resp, err := client.Do(req)
@@ -294,17 +314,30 @@ func hSTSInsight(value string) string {
 }
 
 // traceRedirects follows a redirect chain up to 10 hops.
-func traceRedirects(startURL string) []RedirectHop {
+// Uses the same resolve override and debug header options as checkHTTP.
+func traceRedirects(startURL, hostname string, opts Options) []RedirectHop {
 	var chain []RedirectHop
 	currentURL := startURL
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
 		},
+	}
+
+	if opts.ResolveIP != "" {
+		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			_, port, _ := net.SplitHostPort(addr)
+			return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(
+				ctx, network, net.JoinHostPort(opts.ResolveIP, port),
+			)
+		}
+		transport.TLSClientConfig.ServerName = hostname
+	}
+
+	client := &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -315,6 +348,12 @@ func traceRedirects(startURL string) []RedirectHop {
 		req, err := http.NewRequest("GET", currentURL, nil)
 		if err != nil {
 			break
+		}
+		if opts.PantheonDebug {
+			req.Header.Set("Pantheon-Debug", "1")
+		}
+		if opts.FastlyDebug {
+			req.Header.Set("Fastly-Debug", "1")
 		}
 		req.Header.Set("User-Agent", "ps-site-check/1.0")
 
