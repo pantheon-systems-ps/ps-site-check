@@ -5,6 +5,7 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -41,9 +42,12 @@ func checkTLS(hostname, port string, opts Options) *TLSResult {
 	defer conn.Close()
 
 	state := conn.ConnectionState()
+	cipherName := tls.CipherSuiteName(state.CipherSuite)
 	result := &TLSResult{
-		Protocol:   tlsVersionString(state.Version),
-		DurationMS: time.Since(start).Milliseconds(),
+		Protocol:       tlsVersionString(state.Version),
+		CipherSuite:    cipherName,
+		CipherSecurity: classifyCipherSecurity(state.CipherSuite, cipherName),
+		DurationMS:     time.Since(start).Milliseconds(),
 	}
 
 	if len(state.PeerCertificates) > 0 {
@@ -88,4 +92,81 @@ func formatIssuer(issuer pkix.Name) string {
 		return issuer.Organization[0]
 	}
 	return issuer.String()
+}
+
+// classifyCipherSecurity returns a security level for the negotiated cipher suite.
+// Based on cipher suite classifications from ciphersuite.info and industry standards.
+func classifyCipherSecurity(id uint16, name string) string {
+	// TLS 1.3 cipher suites are all recommended
+	tls13Ciphers := map[uint16]bool{
+		tls.TLS_AES_128_GCM_SHA256:       true,
+		tls.TLS_AES_256_GCM_SHA384:       true,
+		tls.TLS_CHACHA20_POLY1305_SHA256: true,
+	}
+	if tls13Ciphers[id] {
+		return "recommended"
+	}
+
+	// TLS 1.2 recommended: ECDHE + AEAD ciphers
+	recommended := map[uint16]bool{
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:   true,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:   true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: true,
+		tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:   true,
+		tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: true,
+	}
+	if recommended[id] {
+		return "recommended"
+	}
+
+	// Secure: ECDHE + CBC (forward secrecy but not AEAD)
+	secure := map[uint16]bool{
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256: true,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:    true,
+		tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:    true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256: true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA:    true,
+		tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA:    true,
+	}
+	if secure[id] {
+		return "secure"
+	}
+
+	// Weak: no forward secrecy (RSA key exchange) or weak constructions
+	weak := map[uint16]bool{
+		tls.TLS_RSA_WITH_AES_128_GCM_SHA256: true,
+		tls.TLS_RSA_WITH_AES_256_GCM_SHA384: true,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA256: true,
+		tls.TLS_RSA_WITH_AES_128_CBC_SHA:    true,
+		tls.TLS_RSA_WITH_AES_256_CBC_SHA:    true,
+	}
+	if weak[id] {
+		return "weak"
+	}
+
+	// Insecure: RC4, 3DES, or NULL ciphers
+	insecure := map[uint16]bool{
+		tls.TLS_RSA_WITH_RC4_128_SHA:        true,
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA:   true,
+		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA:  true,
+		tls.TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA: true,
+	}
+	if insecure[id] {
+		return "insecure"
+	}
+
+	// Unknown cipher — check by name patterns as fallback
+	nameLower := strings.ToLower(name)
+	switch {
+	case strings.Contains(nameLower, "rc4") || strings.Contains(nameLower, "3des") || strings.Contains(nameLower, "null"):
+		return "insecure"
+	case strings.Contains(nameLower, "chacha20") || strings.Contains(nameLower, "gcm"):
+		if strings.Contains(nameLower, "ecdhe") {
+			return "recommended"
+		}
+		return "weak"
+	}
+
+	return "unknown"
 }

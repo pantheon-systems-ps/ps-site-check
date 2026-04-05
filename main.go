@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -60,6 +61,7 @@ func main() {
 	mux.HandleFunc("GET /check", withMiddleware(handleCheck))
 	mux.HandleFunc("POST /check-batch", withMiddleware(handleBatch))
 	mux.HandleFunc("POST /check-har", withMiddleware(handleHAR))
+	mux.HandleFunc("GET /subdomains", withMiddleware(handleSubdomains))
 	mux.HandleFunc("GET /result/{id}", handleResult)
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -146,12 +148,22 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 		fastlyDebug = q.Get("fdebug") == "true"
 	}
 
+	// Parse warmup count (default 0 = disabled)
+	warmup := 0
+	if w := q.Get("warmup"); w != "" {
+		if n, err := strconv.Atoi(w); err == nil && n >= 2 && n <= 20 {
+			warmup = n
+		}
+	}
+
 	opts := checker.Options{
 		DoubleRequest:   q.Get("double") == "true",
 		FollowRedirects: q.Get("follow") == "true",
 		ResolveIP:       resolve,
 		PantheonDebug:   pantheonDebug,
 		FastlyDebug:     fastlyDebug,
+		ClientIP:        q.Get("client_ip"),
+		WarmupRequests:  warmup,
 	}
 
 	result := checker.Run(rawURL, opts)
@@ -201,6 +213,24 @@ func handleHAR(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, analysis)
+}
+
+func handleSubdomains(w http.ResponseWriter, r *http.Request) {
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing required parameter: domain",
+		})
+		return
+	}
+
+	result := checker.LookupSubdomains(domain)
+	if result.Error != "" {
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 func handleResult(w http.ResponseWriter, r *http.Request) {

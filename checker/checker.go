@@ -85,13 +85,18 @@ func Run(rawURL string, opts Options) *Result {
 		result.SecondHTTP = checkHTTP(rawURL, hostname, opts)
 	}
 
+	// Cache warmup test: make N sequential requests and measure hit ratio
+	if opts.WarmupRequests >= 2 && httpResult != nil && httpResult.Error == "" {
+		result.Warmup = runWarmup(rawURL, hostname, opts)
+	}
+
 	// Redirect chain tracing
 	if opts.FollowRedirects && httpResult != nil && httpResult.StatusCode >= 300 && httpResult.StatusCode < 400 {
 		result.RedirectChain = traceRedirects(rawURL, hostname, opts)
 	}
 
 	result.DurationMS = time.Since(start).Milliseconds()
-	result.Insights = generateInsights(dnsResult, dnsMulti, httpResult, result.SecondHTTP, tlsResult, result.RedirectChain, opts.ResolveIP)
+	result.Insights = generateInsights(dnsResult, dnsMulti, httpResult, result.SecondHTTP, result.Warmup, tlsResult, result.RedirectChain, opts.ResolveIP)
 
 	return result
 }
@@ -121,6 +126,42 @@ func RunBatch(urls []string, opts Options) *BatchResult {
 		TotalMS:   time.Since(start).Milliseconds(),
 		TotalURLs: len(urls),
 	}
+}
+
+// runWarmup makes N sequential requests and calculates cache hit ratio.
+func runWarmup(rawURL, hostname string, opts Options) *WarmupResult {
+	result := &WarmupResult{
+		TotalRequests: opts.WarmupRequests,
+		Requests:      make([]WarmupRequest, 0, opts.WarmupRequests),
+	}
+
+	for i := 0; i < opts.WarmupRequests; i++ {
+		if i > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		resp := checkHTTP(rawURL, hostname, opts)
+		xCache := resp.Headers["x-cache"]
+
+		req := WarmupRequest{
+			Sequence:   i + 1,
+			XCache:     xCache,
+			StatusCode: resp.StatusCode,
+			DurationMS: resp.DurationMS,
+		}
+		result.Requests = append(result.Requests, req)
+
+		if strings.Contains(strings.ToUpper(xCache), "HIT") {
+			result.Hits++
+		} else {
+			result.Misses++
+		}
+	}
+
+	if result.TotalRequests > 0 {
+		result.HitRatio = float64(result.Hits) / float64(result.TotalRequests)
+	}
+
+	return result
 }
 
 // normalizeURL ensures the URL has a scheme.

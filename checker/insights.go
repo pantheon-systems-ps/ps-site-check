@@ -8,7 +8,7 @@ import (
 )
 
 // generateInsights produces curated observations from the check results.
-func generateInsights(dns *DNSResult, dnsMulti []DNSPathResult, http *HTTPResult, secondHTTP *HTTPResult, tls *TLSResult, redirectChain []RedirectHop, resolveIP string) []Insight {
+func generateInsights(dns *DNSResult, dnsMulti []DNSPathResult, http *HTTPResult, secondHTTP *HTTPResult, warmup *WarmupResult, tls *TLSResult, redirectChain []RedirectHop, resolveIP string) []Insight {
 	var insights []Insight
 
 	if resolveIP != "" {
@@ -23,6 +23,7 @@ func generateInsights(dns *DNSResult, dnsMulti []DNSPathResult, http *HTTPResult
 	insights = append(insights, dnsMultiInsights(dnsMulti)...)
 	insights = append(insights, httpInsights(http)...)
 	insights = append(insights, doubleRequestInsights(http, secondHTTP)...)
+	insights = append(insights, warmupInsights(warmup)...)
 	insights = append(insights, redirectChainInsights(redirectChain)...)
 	insights = append(insights, tlsInsights(tls)...)
 	insights = append(insights, crossCheckInsights(dns, http, tls)...)
@@ -109,6 +110,57 @@ func doubleRequestInsights(first *HTTPResult, second *HTTPResult) []Insight {
 				Severity: "info",
 				Category: "cache",
 				Message:  fmt.Sprintf("Second request was %dx faster (%dms vs %dms) — cache acceleration confirmed", first.DurationMS/second.DurationMS, second.DurationMS, first.DurationMS),
+			})
+		}
+	}
+
+	return insights
+}
+
+func warmupInsights(warmup *WarmupResult) []Insight {
+	if warmup == nil || len(warmup.Requests) == 0 {
+		return nil
+	}
+
+	var insights []Insight
+
+	ratio := warmup.HitRatio * 100
+	switch {
+	case ratio == 0:
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "cache",
+			Message:  fmt.Sprintf("Cache warmup: 0%% hit ratio across %d requests — content is not being cached", warmup.TotalRequests),
+		})
+	case ratio < 50:
+		insights = append(insights, Insight{
+			Severity: "warning",
+			Category: "cache",
+			Message:  fmt.Sprintf("Cache warmup: %.0f%% hit ratio (%d/%d) — low cache effectiveness", ratio, warmup.Hits, warmup.TotalRequests),
+		})
+	case ratio >= 80:
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cache",
+			Message:  fmt.Sprintf("Cache warmup: %.0f%% hit ratio (%d/%d) — good cache effectiveness", ratio, warmup.Hits, warmup.TotalRequests),
+		})
+	default:
+		insights = append(insights, Insight{
+			Severity: "info",
+			Category: "cache",
+			Message:  fmt.Sprintf("Cache warmup: %.0f%% hit ratio (%d/%d requests)", ratio, warmup.Hits, warmup.TotalRequests),
+		})
+	}
+
+	// Compare first vs last request timing
+	if len(warmup.Requests) >= 2 {
+		first := warmup.Requests[0]
+		last := warmup.Requests[len(warmup.Requests)-1]
+		if first.DurationMS > 500 && last.DurationMS > 0 && last.DurationMS < first.DurationMS/2 {
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "cache",
+				Message:  fmt.Sprintf("Cache acceleration confirmed: first request %dms → last request %dms", first.DurationMS, last.DurationMS),
 			})
 		}
 	}
@@ -216,6 +268,69 @@ func dnsInsights(dns *DNSResult) []Insight {
 				Severity: "info",
 				Category: "dns",
 				Message:  "CNAME points to Pantheon platform (" + cname + ")",
+			})
+		}
+	}
+
+	// NS record insights
+	if len(dns.NS) > 0 {
+		for _, ns := range dns.NS {
+			nsLower := strings.ToLower(ns)
+			switch {
+			case strings.Contains(nsLower, "awsdns"):
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "dns",
+					Message:  "DNS hosted on AWS Route 53 (" + ns + ")",
+				})
+				break
+			case strings.Contains(nsLower, "cloudflare"):
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "dns",
+					Message:  "DNS hosted on Cloudflare (" + ns + ")",
+				})
+				break
+			case strings.Contains(nsLower, "google"):
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "dns",
+					Message:  "DNS hosted on Google Cloud DNS (" + ns + ")",
+				})
+				break
+			case strings.Contains(nsLower, "domaincontrol"):
+				insights = append(insights, Insight{
+					Severity: "info",
+					Category: "dns",
+					Message:  "DNS hosted on GoDaddy (" + ns + ")",
+				})
+				break
+			}
+			break // Only report the first NS provider match
+		}
+	}
+
+	// TXT record insights
+	for _, txt := range dns.TXT {
+		txtLower := strings.ToLower(txt)
+		switch {
+		case strings.HasPrefix(txtLower, "v=spf1"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "dns",
+				Message:  "SPF record configured for email authentication",
+			})
+		case strings.Contains(txtLower, "_dmarc"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "dns",
+				Message:  "DMARC policy configured",
+			})
+		case strings.HasPrefix(txt, "google-site-verification") || strings.HasPrefix(txt, "MS=") || strings.HasPrefix(txt, "facebook-domain-verification"):
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "dns",
+				Message:  "Domain verification TXT record present: " + txt[:min(len(txt), 60)],
 			})
 		}
 	}
@@ -523,6 +638,30 @@ func tlsInsights(tls *TLSResult) []Insight {
 			Category: "tls",
 			Message:  "TLS 1.3 — latest protocol with best performance and security",
 		})
+	}
+
+	// Cipher suite analysis
+	if tls.CipherSuite != "" {
+		switch tls.CipherSecurity {
+		case "insecure":
+			insights = append(insights, Insight{
+				Severity: "error",
+				Category: "tls",
+				Message:  "Insecure cipher suite negotiated: " + tls.CipherSuite + " — uses broken or deprecated algorithms",
+			})
+		case "weak":
+			insights = append(insights, Insight{
+				Severity: "warning",
+				Category: "tls",
+				Message:  "Weak cipher suite negotiated: " + tls.CipherSuite + " — lacks forward secrecy",
+			})
+		case "recommended":
+			insights = append(insights, Insight{
+				Severity: "info",
+				Category: "tls",
+				Message:  "Strong cipher suite: " + tls.CipherSuite,
+			})
+		}
 	}
 
 	// Certificate issuer analysis

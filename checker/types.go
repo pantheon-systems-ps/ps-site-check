@@ -9,6 +9,8 @@ type Options struct {
 	ResolveIP       string // Force-resolve HTTP/TLS to this IP (like curl --resolve)
 	PantheonDebug   bool   // Send Pantheon-Debug: 1 header
 	FastlyDebug     bool   // Send Fastly-Debug: 1 header
+	ClientIP        string // Spoof Fastly-Client-IP header for geo-routing tests
+	WarmupRequests  int    // Number of requests for cache warmup test (0 = disabled)
 }
 
 // Result is the top-level response from a site check.
@@ -22,18 +24,45 @@ type Result struct {
 	DNSMulti      []DNSPathResult  `json:"dns_multi,omitempty"`
 	HTTP          *HTTPResult      `json:"http"`
 	SecondHTTP    *HTTPResult      `json:"second_http,omitempty"`
+	Warmup        *WarmupResult    `json:"warmup,omitempty"`
 	RedirectChain []RedirectHop    `json:"redirect_chain,omitempty"`
 	TLS           *TLSResult       `json:"tls"`
 	Insights      []Insight        `json:"insights"`
 }
 
+// WarmupResult contains cache warmup test data.
+type WarmupResult struct {
+	TotalRequests int             `json:"total_requests"`
+	Hits          int             `json:"hits"`
+	Misses        int             `json:"misses"`
+	HitRatio      float64         `json:"hit_ratio"`
+	Requests      []WarmupRequest `json:"requests"`
+}
+
+// WarmupRequest captures one request in the warmup sequence.
+type WarmupRequest struct {
+	Sequence   int    `json:"sequence"`
+	XCache     string `json:"x_cache"`
+	StatusCode int    `json:"status_code"`
+	DurationMS int64  `json:"duration_ms"`
+}
+
 // DNSResult contains DNS resolution data.
 type DNSResult struct {
-	A          []string `json:"a"`
-	AAAA       []string `json:"aaaa"`
-	CNAME      []string `json:"cname"`
-	DurationMS int64    `json:"duration_ms"`
-	Error      string   `json:"error,omitempty"`
+	A          []string   `json:"a"`
+	AAAA       []string   `json:"aaaa"`
+	CNAME      []string   `json:"cname"`
+	MX         []MXRecord `json:"mx,omitempty"`
+	NS         []string   `json:"ns,omitempty"`
+	TXT        []string   `json:"txt,omitempty"`
+	DurationMS int64      `json:"duration_ms"`
+	Error      string     `json:"error,omitempty"`
+}
+
+// MXRecord contains a mail exchange record.
+type MXRecord struct {
+	Host     string `json:"host"`
+	Priority uint16 `json:"priority"`
 }
 
 // DNSPathResult contains DNS resolution via a specific resolver.
@@ -64,14 +93,16 @@ type AGCDNHeader struct {
 
 // TLSResult contains TLS certificate information.
 type TLSResult struct {
-	Protocol   string   `json:"protocol"`
-	Subject    string   `json:"subject"`
-	Issuer     string   `json:"issuer"`
-	ValidFrom  string   `json:"valid_from"`
-	ValidTo    string   `json:"valid_to"`
-	SANs       []string `json:"sans"`
-	DurationMS int64    `json:"duration_ms"`
-	Error      string   `json:"error,omitempty"`
+	Protocol      string   `json:"protocol"`
+	CipherSuite   string   `json:"cipher_suite,omitempty"`
+	CipherSecurity string  `json:"cipher_security,omitempty"` // "recommended", "secure", "weak", "insecure"
+	Subject       string   `json:"subject"`
+	Issuer        string   `json:"issuer"`
+	ValidFrom     string   `json:"valid_from"`
+	ValidTo       string   `json:"valid_to"`
+	SANs          []string `json:"sans"`
+	DurationMS    int64    `json:"duration_ms"`
+	Error         string   `json:"error,omitempty"`
 }
 
 // RedirectHop represents one step in a redirect chain.

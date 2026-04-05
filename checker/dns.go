@@ -34,6 +34,31 @@ func checkDNS(hostname string) *DNSResult {
 		result.CNAME = append(result.CNAME, cname)
 	}
 
+	// Resolve MX records
+	mxRecords, err := resolver.LookupMX(ctx, hostname)
+	if err == nil {
+		for _, mx := range mxRecords {
+			result.MX = append(result.MX, MXRecord{
+				Host:     mx.Host,
+				Priority: mx.Pref,
+			})
+		}
+	}
+
+	// Resolve NS records
+	nsRecords, err := resolver.LookupNS(ctx, hostname)
+	if err == nil {
+		for _, ns := range nsRecords {
+			result.NS = append(result.NS, ns.Host)
+		}
+	}
+
+	// Resolve TXT records
+	txtRecords, err := resolver.LookupTXT(ctx, hostname)
+	if err == nil {
+		result.TXT = txtRecords
+	}
+
 	// Ensure non-nil slices for clean JSON
 	if result.A == nil {
 		result.A = []string{}
