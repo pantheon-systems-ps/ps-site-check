@@ -16,6 +16,7 @@ checker/
   tls.go             # checkTLS(), classifyCipherSecurity(), tlsVersionString(), formatIssuer()
   insights.go        # generateInsights(), per-category insight functions, warmupInsights()
   subdomains.go      # LookupSubdomains() — CT log search via crt.sh
+  securitytrails.go  # SecurityTrails API: LookupDNSHistory(), LookupWHOIS(), LookupSubdomainsST(), LookupDomainDetails()
   har.go             # AnalyzeHAR() — HAR file analysis
   validate.go        # ValidateResolveIP() — SSRF prevention
 cloudbuild.yaml      # CI/CD for Cloud Run auto-deploy

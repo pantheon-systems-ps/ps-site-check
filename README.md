@@ -36,13 +36,40 @@ GET /check?url=site.com&debug=false&fdebug=false   # disable debug headers
 
 ### Subdomain discovery
 
-Discover subdomains via Certificate Transparency logs (crt.sh). No API key required.
+Discover subdomains. Uses SecurityTrails when `SECURITYTRAILS_API_KEY` is set (up to 31k+ results), falls back to crt.sh Certificate Transparency logs.
 
 ```
-GET /subdomains?domain=pantheon.io
+GET /subdomains?domain=pantheon.io             # auto-select best source
+GET /subdomains?domain=pantheon.io&source=crtsh  # force crt.sh
 ```
 
-Returns discovered subdomains with count and timing.
+### DNS history (SecurityTrails)
+
+View historical DNS record changes — useful for migration debugging.
+
+```
+GET /dns-history?domain=pantheon.io              # defaults to A records
+GET /dns-history?domain=pantheon.io&type=ns       # NS record history
+GET /dns-history?domain=pantheon.io&type=mx       # MX record history
+```
+
+Supported types: `a`, `aaaa`, `mx`, `ns`, `soa`, `txt`
+
+### WHOIS history (SecurityTrails)
+
+Domain registration history — registrar, expiry, nameservers, contacts.
+
+```
+GET /whois?domain=pantheon.io
+```
+
+### Domain details (SecurityTrails)
+
+Current authoritative DNS data with organization attribution.
+
+```
+GET /domain?domain=pantheon.io
+```
 
 ### Batch check (up to 10 URLs)
 
@@ -82,7 +109,9 @@ GET /health
 | **HTTP** | Response headers with `Pantheon-Debug: 1` and `Fastly-Debug: 1`, 34 AGCDN-relevant headers with per-header insights |
 | **TLS** | Certificate subject, issuer, SANs, validity dates, protocol version, cipher suite with security classification |
 | **Cache** | Double-request MISS→HIT test, warmup test with N-request hit ratio analysis |
-| **Subdomains** | Certificate Transparency log search via crt.sh |
+| **Subdomains** | SecurityTrails (preferred) or crt.sh Certificate Transparency |
+| **DNS History** | Historical DNS record changes via SecurityTrails |
+| **WHOIS** | Domain registration history via SecurityTrails |
 | **Insights** | Curated observations across cache, CDN, security, TLS, DNS categories |
 
 ### Insights engine covers
@@ -129,6 +158,7 @@ CI/CD: `cloudbuild.yaml` is included. Connect the repo to Cloud Build in the GCP
 |---------|-------------|----------|
 | `PORT` | Server port (default: 8080) | No |
 | `API_KEY` | API key for authentication. When set, requests must include `X-API-Key` header or `?key=` param | No |
+| `SECURITYTRAILS_API_KEY` | SecurityTrails API key. Enables `/dns-history`, `/whois`, `/domain` endpoints and enhanced `/subdomains`. Free tier: 50 queries/month at [securitytrails.com](https://securitytrails.com/app/signup) | No |
 
 ## Rate limiting
 

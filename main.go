@@ -62,6 +62,9 @@ func main() {
 	mux.HandleFunc("POST /check-batch", withMiddleware(handleBatch))
 	mux.HandleFunc("POST /check-har", withMiddleware(handleHAR))
 	mux.HandleFunc("GET /subdomains", withMiddleware(handleSubdomains))
+	mux.HandleFunc("GET /dns-history", withMiddleware(handleDNSHistory))
+	mux.HandleFunc("GET /whois", withMiddleware(handleWHOIS))
+	mux.HandleFunc("GET /domain", withMiddleware(handleDomainDetails))
 	mux.HandleFunc("GET /result/{id}", handleResult)
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -224,12 +227,85 @@ func handleSubdomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := checker.LookupSubdomains(domain)
-	if result.Error != "" {
+	// Prefer SecurityTrails when API key is available, fall back to crt.sh
+	stKey := os.Getenv("SECURITYTRAILS_API_KEY")
+	source := r.URL.Query().Get("source") // "crtsh" to force crt.sh
+	if stKey != "" && source != "crtsh" {
+		result := checker.LookupSubdomainsST(domain, stKey)
 		writeJSON(w, http.StatusOK, result)
 		return
 	}
 
+	result := checker.LookupSubdomains(domain)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleDNSHistory(w http.ResponseWriter, r *http.Request) {
+	stKey := os.Getenv("SECURITYTRAILS_API_KEY")
+	if stKey == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "SECURITYTRAILS_API_KEY not configured",
+		})
+		return
+	}
+
+	q := r.URL.Query()
+	domain := q.Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing required parameter: domain",
+		})
+		return
+	}
+
+	recordType := q.Get("type")
+	if recordType == "" {
+		recordType = "a"
+	}
+
+	result := checker.LookupDNSHistory(domain, recordType, stKey)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleWHOIS(w http.ResponseWriter, r *http.Request) {
+	stKey := os.Getenv("SECURITYTRAILS_API_KEY")
+	if stKey == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "SECURITYTRAILS_API_KEY not configured",
+		})
+		return
+	}
+
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing required parameter: domain",
+		})
+		return
+	}
+
+	result := checker.LookupWHOIS(domain, stKey)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleDomainDetails(w http.ResponseWriter, r *http.Request) {
+	stKey := os.Getenv("SECURITYTRAILS_API_KEY")
+	if stKey == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "SECURITYTRAILS_API_KEY not configured",
+		})
+		return
+	}
+
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing required parameter: domain",
+		})
+		return
+	}
+
+	result := checker.LookupDomainDetails(domain, stKey)
 	writeJSON(w, http.StatusOK, result)
 }
 
