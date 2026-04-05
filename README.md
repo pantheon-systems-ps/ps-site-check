@@ -14,7 +14,35 @@ GET /check?url=pantheon.io
 GET /check?url=pantheon.io/docs&follow=true       # follow redirect chain
 GET /check?url=pantheon.io&double=true             # cache test (MISS→HIT)
 GET /check?url=pantheon.io&double=true&follow=true # both
+GET /check?url=pantheon.io&warmup=5                # cache warmup (5 requests, report hit ratio)
+GET /check?url=pantheon.io&client_ip=203.0.113.1   # spoof Fastly-Client-IP for geo-routing test
+GET /check?url=site.com&resolve=192.0.2.1          # force-resolve to specific IP
+GET /check?url=site.com&debug=false&fdebug=false   # disable debug headers
 ```
+
+#### Query parameters
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `url` | string | **(required)** Domain or URL to check |
+| `double` | bool | Make two requests with 2s delay to test MISS→HIT |
+| `follow` | bool | Trace redirect chain (up to 10 hops) |
+| `warmup` | int | Cache warmup test: make N requests (2-20) and report hit ratio |
+| `resolve` | string | Force HTTP/TLS to connect to this IP (like `curl --resolve`) |
+| `client_ip` | string | Send `Fastly-Client-IP` header for geo-routing tests |
+| `debug` | bool | Send `Pantheon-Debug: 1` header (default: true) |
+| `fdebug` | bool | Send `Fastly-Debug: 1` header (default: true) |
+| `key` | string | API key (if `API_KEY` env var is set) |
+
+### Subdomain discovery
+
+Discover subdomains via Certificate Transparency logs (crt.sh). No API key required.
+
+```
+GET /subdomains?domain=pantheon.io
+```
+
+Returns discovered subdomains with count and timing.
 
 ### Batch check (up to 10 URLs)
 
@@ -23,6 +51,16 @@ curl -X POST /check-batch \
   -H "Content-Type: application/json" \
   -d '{"urls": ["pantheon.io", "example.com", "docs.pantheon.io"]}'
 ```
+
+### HAR file analysis
+
+```bash
+curl -X POST /check-har \
+  -H "Content-Type: application/json" \
+  -d @recording.har
+```
+
+Analyzes HAR files for slow requests, errors, cache hit ratio, and per-domain/content-type stats.
 
 ### Retrieve cached result (permalink)
 
@@ -40,20 +78,26 @@ GET /health
 
 | Check | Details |
 |-------|---------|
-| **DNS** | A, AAAA, CNAME records + multi-resolver comparison (Google, Cloudflare, Quad9) |
+| **DNS** | A, AAAA, CNAME, MX, NS, TXT records + multi-resolver comparison (Google, Cloudflare, Quad9) |
 | **HTTP** | Response headers with `Pantheon-Debug: 1` and `Fastly-Debug: 1`, 34 AGCDN-relevant headers with per-header insights |
-| **TLS** | Certificate subject, issuer, SANs, validity dates, protocol version |
+| **TLS** | Certificate subject, issuer, SANs, validity dates, protocol version, cipher suite with security classification |
+| **Cache** | Double-request MISS→HIT test, warmup test with N-request hit ratio analysis |
+| **Subdomains** | Certificate Transparency log search via crt.sh |
 | **Insights** | Curated observations across cache, CDN, security, TLS, DNS categories |
 
 ### Insights engine covers
 
 - AGCDN/GCDN/Fastly detection
 - Cache effectiveness (HIT/MISS analysis, Cache-Control, Vary: Cookie, Set-Cookie)
+- Cache warmup hit ratio analysis with cache acceleration detection
 - Double-request MISS→HIT comparison with response time acceleration
 - Redirect chain analysis (HTTP→HTTPS, loops, long chains)
 - DNS consistency across resolvers
+- DNS provider detection (Route 53, Cloudflare, Google Cloud DNS, GoDaddy)
+- SPF, DMARC, and domain verification TXT record detection
 - TLS certificate expiry warnings (7/30 day thresholds)
 - TLS version checks (deprecated 1.0/1.1)
+- TLS cipher suite security classification (recommended/secure/weak/insecure)
 - Certificate issuer identification (Let's Encrypt, GlobalSign, Certainly)
 - Security headers (HSTS, X-Frame-Options, CSP, X-Content-Type-Options)
 - Pantheon platform detection (Styx, pcontext-backend, HTTPS enforcement)

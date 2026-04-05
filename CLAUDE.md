@@ -9,12 +9,15 @@ ps-site-check is a Go HTTP API for site inspection — DNS, HTTP headers, TLS ce
 ```
 main.go              # HTTP server, middleware (auth, rate limit, logging), handlers, result cache
 checker/
-  types.go           # All data types (Result, Options, DNSResult, HTTPResult, TLSResult, etc.)
-  checker.go         # Run() orchestrator, RunBatch(), normalizeURL(), generateID()
-  dns.go             # checkDNS(), checkDNSMultiPath(), resolveVia()
+  types.go           # All data types (Result, Options, DNSResult, HTTPResult, TLSResult, WarmupResult, etc.)
+  checker.go         # Run() orchestrator, RunBatch(), runWarmup(), normalizeURL(), generateID()
+  dns.go             # checkDNS(), checkDNSMultiPath(), resolveVia() — A/AAAA/CNAME/MX/NS/TXT
   http.go            # checkHTTP(), extractAGCDNHeaders(), headerInsight(), traceRedirects()
-  tls.go             # checkTLS(), tlsVersionString(), formatIssuer()
-  insights.go        # generateInsights(), per-category insight functions
+  tls.go             # checkTLS(), classifyCipherSecurity(), tlsVersionString(), formatIssuer()
+  insights.go        # generateInsights(), per-category insight functions, warmupInsights()
+  subdomains.go      # LookupSubdomains() — CT log search via crt.sh
+  har.go             # AnalyzeHAR() — HAR file analysis
+  validate.go        # ValidateResolveIP() — SSRF prevention
 cloudbuild.yaml      # CI/CD for Cloud Run auto-deploy
 Dockerfile           # Multi-stage Alpine build
 ```
