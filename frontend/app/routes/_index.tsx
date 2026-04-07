@@ -199,17 +199,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     try {
       const resp = await fetch(`${SITE_CHECK_API}/result/${resultId}`);
       if (!resp.ok) {
-        return { result: null, error: "Result not found or expired", options: null, subdomains: null };
+        return { result: null, error: "Result not found or expired", options: null };
       }
       const result: SiteCheckResult = await resp.json();
-      return { result, error: null, options: null, subdomains: null };
+      return { result, error: null, options: null };
     } catch (e) {
-      return { result: null, error: e instanceof Error ? e.message : "Unknown error", options: null, subdomains: null };
+      return { result: null, error: e instanceof Error ? e.message : "Unknown error", options: null };
     }
   }
 
   if (!url) {
-    return { result: null, error: null, options: null, subdomains: null };
+    return { result: null, error: null, options: null };
   }
 
   const double = params.get("double") === "true";
@@ -233,34 +233,21 @@ export async function loader({ request }: Route.LoaderArgs) {
     if (clientIp) apiURL.searchParams.set("client_ip", clientIp);
     if (userAgent) apiURL.searchParams.set("user_agent", userAgent);
 
-    // Extract root domain for subdomain lookup
-    const domain = url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
-    const subdomainsURL = `${SITE_CHECK_API}/subdomains?domain=${encodeURIComponent(domain)}`;
-
-    // Server-side: only fetch check + subdomains (fast ~300ms)
-    // SEO + Lighthouse load client-side in background (non-blocking)
-    const [checkResp, subResp] = await Promise.all([
-      fetch(apiURL.toString()),
-      fetch(subdomainsURL).catch(() => null),
-    ]);
+    // Server-side: only fetch the core check (fast ~300ms)
+    // SEO, Lighthouse, Subdomains load client-side on demand
+    const checkResp = await fetch(apiURL.toString());
 
     if (!checkResp.ok) {
-      return { result: null, error: `API returned ${checkResp.status}`, options: null, subdomains: null };
+      return { result: null, error: `API returned ${checkResp.status}`, options: null };
     }
 
     const result: SiteCheckResult = await checkResp.json();
     const resolveLabel = RESOLVE_TARGETS.find((t) => t.value === resolve)?.label || "";
 
-    let subdomains: SubdomainResult | null = null;
-    if (subResp?.ok) {
-      subdomains = await subResp.json();
-    }
-
     return {
       result,
       error: null,
       options: { resolve, resolveLabel, debug, fdebug, warmup, clientIp, userAgent },
-      subdomains,
     };
   } catch (e) {
     return {
@@ -275,7 +262,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 // -- Main component --
 
 export default function Check({ loaderData }: Route.ComponentProps) {
-  const { result, error, options, subdomains } = loaderData;
+  const { result, error, options } = loaderData;
   const navigation = useNavigation();
   const isChecking = navigation.state === "loading";
 
@@ -385,7 +372,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
         </Callout>
       )}
 
-      {result && !isChecking && <CheckResults result={result} options={options} subdomains={subdomains} />}
+      {result && !isChecking && <CheckResults result={result} options={options} />}
     </>
   );
 }
@@ -394,7 +381,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
 
 type CheckOptions = { resolve: string; resolveLabel: string; debug: boolean; fdebug: boolean; warmup: number; clientIp: string; userAgent: string } | null;
 
-function CheckResults({ result, options, subdomains }: { result: SiteCheckResult; options?: CheckOptions; subdomains?: SubdomainResult | null }) {
+function CheckResults({ result, options }: { result: SiteCheckResult; options?: CheckOptions }) {
   const permalinkURL = `/?id=${result.id}`;
   const resolveIP = options?.resolve || result.resolve_ip || "";
   const resolveLabel = resolveIP
@@ -413,8 +400,19 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
   const [seoLoading, setSeoLoading] = useState(true);
   const [lighthouse, setLighthouse] = useState<any>(null);
   const [lhLoading, setLhLoading] = useState(true);
+  const [subdomains, setSubdomains] = useState<SubdomainResult | null>(null);
+  const [subLoading, setSubLoading] = useState(false);
 
   const domain = result.url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+
+  const discoverSubdomains = async () => {
+    setSubLoading(true);
+    try {
+      const resp = await fetch(`${CLIENT_API}/subdomains?domain=${encodeURIComponent(domain)}`);
+      if (resp.ok) setSubdomains(await resp.json());
+    } catch { /* ignore */ }
+    setSubLoading(false);
+  };
 
   useEffect(() => {
     // SEO audit (fast, ~1-2s)
@@ -570,8 +568,26 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <SectionCard id="sec-subdomains" title="Subdomains"
             score={subdomains?.count ? { value: subdomains.count, color: "var(--color-text-secondary)" } : undefined}
-            summary={subdomains?.count ? `${subdomains.count} found via ${subdomains.source}` : "No data"}>
-            <SubdomainsTab subdomains={subdomains || null} />
+            summary={subdomains?.count ? `${subdomains.count} found via ${subdomains.source}` : "Uses SecurityTrails / CT logs"}
+            loading={subLoading} loadingMessage="Discovering subdomains...">
+            {subdomains ? (
+              <SubdomainsTab subdomains={subdomains} />
+            ) : (
+              <div style={{ textAlign: "center", padding: "1rem" }}>
+                <p style={{ fontSize: "0.82rem", color: "var(--color-text-muted)", marginBottom: "0.75rem" }}>
+                  Discover subdomains via SecurityTrails or Certificate Transparency logs.
+                </p>
+                <button
+                  onClick={discoverSubdomains}
+                  style={{
+                    padding: "0.4rem 1rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)",
+                    background: "var(--color-bg)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, color: "var(--color-primary)",
+                  }}
+                >
+                  Discover Subdomains
+                </button>
+              </div>
+            )}
           </SectionCard>
 
           <SectionCard id="sec-agcdn" title="AGCDN Probe" summary="Active feature detection (WAF, IO, Rate Limiting)">
