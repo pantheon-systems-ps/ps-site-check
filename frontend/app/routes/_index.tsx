@@ -439,44 +439,45 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
 
   return (
     <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      {/* Score Dashboard */}
+      {/* ── Score Dashboard ── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "0.5rem" }}>
         {[
-          { label: "HTTP", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "#16a34a" : result.http?.status_code && result.http.status_code < 400 ? "#ca8a04" : "#dc2626" },
-          { label: "Security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "#999" },
-          { label: "SEO", value: seo?.score ?? (seoLoading ? "..." : "\u2014"), color: seo ? scoreColor(seo.score) : "#999" },
-          { label: "Performance", value: lighthouse?.performance ?? (lhLoading ? "..." : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "#999" },
-          { label: "Email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "#999" },
-          { label: "Pantheon", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "#4f46e5" : "#999" },
+          { label: "HTTP", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "var(--color-success)" : result.http?.status_code && result.http.status_code < 400 ? "var(--color-warning)" : "var(--color-danger)" },
+          { label: "Security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "var(--color-text-muted)" },
+          { label: "SEO", value: seo?.score ?? (seoLoading ? "\u2026" : "\u2014"), color: seo ? scoreColor(seo.score) : "var(--color-text-muted)" },
+          { label: "Performance", value: lighthouse?.performance ?? (lhLoading ? "\u2026" : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "var(--color-text-muted)" },
+          { label: "Email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "var(--color-text-muted)" },
+          { label: "Pantheon", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "var(--color-primary)" : "var(--color-text-muted)" },
         ].map((s, i) => (
-          <div key={i} style={{ textAlign: "center", padding: "0.6rem 0.25rem", borderRadius: "8px", border: "1px solid #e5e7eb", background: "#fff" }}>
-            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: "0.65rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "0.15rem" }}>{s.label}</div>
+          <div key={i} className="score-card">
+            <div className="score-card__value" style={{ color: s.color }}>{s.value}</div>
+            <div className="score-card__label">{s.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Context line */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", color: "#aaa" }}>
+      {/* ── Context line ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0.25rem" }}>
         <span>
-          <strong style={{ color: "#666" }}>{result.url}</strong>
-          {" \u00b7 "}{result.duration_ms}ms
-          {result.tls?.protocol && ` \u00b7 ${result.tls.protocol}`}
-          {cert.label !== "Unknown" && ` \u00b7 ${cert.label}`}
-          {pantheon.cms && ` \u00b7 ${pantheon.cms}`}
+          <strong style={{ color: "var(--color-text-secondary)" }}>{result.url}</strong>
+          <span style={{ margin: "0 0.3rem" }}>&middot;</span>{result.duration_ms}ms
+          {result.tls?.protocol && <><span style={{ margin: "0 0.3rem" }}>&middot;</span>{result.tls.protocol}</>}
+          {cert.label !== "Unknown" && <><span style={{ margin: "0 0.3rem" }}>&middot;</span>{cert.label}</>}
+          {pantheon.cms && <><span style={{ margin: "0 0.3rem" }}>&middot;</span>{pantheon.cms}</>}
         </span>
-        <span><Link to={permalinkURL} style={{ color: "#aaa" }}>Permalink</Link> &middot; <code>{result.id}</code></span>
+        <span><Link to={permalinkURL} style={{ color: "var(--color-text-muted)" }}>Permalink</Link> &middot; <code style={{ fontSize: "0.7rem" }}>{result.id}</code></span>
       </div>
 
-      {/* ── Insights (grouped by severity, always visible) ── */}
+      {/* ── Insights ── */}
       {result.insights.length > 0 && (
-        <div style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "0.75rem 1rem", background: "#fff" }}>
-          <h4 style={{ margin: "0 0 0.5rem", fontSize: "0.85rem", color: "#1a1a1a" }}>
-            Insights ({result.insights.length})
+        <div className="section-card" style={{ padding: "0.75rem 1rem" }}>
+          <h4 style={{ margin: "0 0 0.5rem", fontSize: "0.82rem", color: "var(--color-text)", fontWeight: 600 }}>
+            Insights
+            <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: "0.35rem" }}>({result.insights.length})</span>
           </h4>
           {errors.length > 0 && (
             <div style={{ marginBottom: "0.5rem" }}>
-              <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", color: "#dc2626", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
+              <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-danger)", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
                 Critical ({errors.length})
               </div>
               {errors.map((insight, i) => <InsightRow key={`e${i}`} insight={insight} />)}
@@ -484,7 +485,7 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
           )}
           {warnings.length > 0 && (
             <div style={{ marginBottom: "0.5rem" }}>
-              <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", color: "#ca8a04", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
+              <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-warning)", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
                 Warnings ({warnings.length})
               </div>
               {warnings.map((insight, i) => <InsightRow key={`w${i}`} insight={insight} />)}
@@ -492,10 +493,10 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
           )}
           {infos.length > 0 && (
             <details>
-              <summary style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", color: "#2563eb", cursor: "pointer", letterSpacing: "0.05em" }}>
+              <summary style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-info)", cursor: "pointer", letterSpacing: "0.05em" }}>
                 Info ({infos.length})
               </summary>
-              <div style={{ marginTop: "0.2rem" }}>
+              <div style={{ marginTop: "0.25rem" }}>
                 {infos.map((insight, i) => <InsightRow key={`i${i}`} insight={insight} />)}
               </div>
             </details>
@@ -506,9 +507,10 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
       {/* ── AI Analysis ── */}
       <AIAnalysisPanel result={result} seo={seo} lighthouse={lighthouse} />
 
-      {/* ── Collapsible Sections ── */}
+      {/* ── Sections ── */}
 
       <SectionCard id="sec-perf" title="Performance"
+        status={lighthouse?.performance ? (lighthouse.performance >= 80 ? "good" : lighthouse.performance >= 50 ? "warning" : "problem") : lhLoading ? "loading" : "neutral"}
         score={lighthouse?.performance != null ? { value: lighthouse.performance, color: scoreColor(lighthouse.performance) } : undefined}
         summary={lighthouse ? `FCP ${lighthouse.fcp || "\u2014"} \u00b7 LCP ${lighthouse.lcp || "\u2014"} \u00b7 ${lighthouse.total_requests || 0} requests` : undefined}
         loading={lhLoading} loadingMessage="Running Lighthouse audit (15-30s)...">
@@ -518,6 +520,7 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
       </SectionCard>
 
       <SectionCard id="sec-seo" title="SEO"
+        status={seo?.score ? (seo.score >= 80 ? "good" : seo.score >= 50 ? "warning" : "problem") : seoLoading ? "loading" : "neutral"}
         score={seo?.score != null ? { value: seo.score, color: scoreColor(seo.score) } : undefined}
         summary={seo ? `Title: ${seo.title?.rating || "\u2014"} \u00b7 Sitemap: ${seo.sitemap?.found ? "\u2713" : "\u2717"} \u00b7 ${seo.issues?.length || 0} issues` : undefined}
         loading={seoLoading} loadingMessage="Running SEO audit...">
@@ -526,16 +529,18 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
 
       {result.security && (
         <SectionCard id="sec-security" title="Security"
+          status={result.security.score >= 70 ? "good" : result.security.score >= 40 ? "warning" : "problem"}
           score={{ value: result.security.grade, color: gradeColor(result.security.grade) }}
-          summary={`${result.security.score}/100 \u00b7 ${result.security.headers.filter(h => h.present).length}/${result.security.headers.length} headers`}>
+          summary={`${result.security.score}/100 \u00b7 ${result.security.headers.filter(h => h.present).length}/${result.security.headers.length} headers present`}>
           <SecurityTab security={result.security} />
         </SectionCard>
       )}
 
       <SectionCard id="sec-infra" title="Infrastructure"
-        score={pantheon.isPantheon ? { value: "\u2713", color: "#4f46e5" } : undefined}
+        status={pantheon.isPantheon ? "good" : "neutral"}
+        score={pantheon.isPantheon ? { value: "\u2713", color: "var(--color-primary)" } : undefined}
         summary={`${result.dns?.a?.[0] || "\u2014"} \u00b7 ${result.tls?.protocol || "\u2014"} \u00b7 ${cert.label}${pantheon.isPantheon ? ` \u00b7 ${result.pantheon?.cdn_tier || "Pantheon"}` : ""}`}>
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
           <DnsTab result={result} />
           <TlsTab result={result} cert={cert} />
           {pantheon.isPantheon && <PantheonTab result={result} pantheon={pantheon} />}
@@ -544,35 +549,44 @@ function CheckResults({ result, options, subdomains }: { result: SiteCheckResult
 
       {result.email_auth && (
         <SectionCard id="sec-email" title="Email Authentication"
+          status={result.email_auth.grade <= "B" ? "good" : result.email_auth.grade <= "C" ? "warning" : "problem"}
           score={{ value: result.email_auth.grade, color: gradeColor(result.email_auth.grade) }}
           summary={`SPF: ${result.email_auth.spf.found ? "\u2713" : "\u2717"} \u00b7 DMARC: ${result.email_auth.dmarc.found ? result.email_auth.dmarc.policy || "\u2713" : "\u2717"}`}>
           <EmailAuthTab emailAuth={result.email_auth} />
         </SectionCard>
       )}
 
-      <SectionCard id="sec-response" title="Response"
-        score={result.http?.agcdn_headers?.length ? { value: result.http.agcdn_headers.length, color: "#666" } : undefined}
-        summary={`Status ${result.http?.status_code || "\u2014"} \u00b7 ${Object.keys(result.http?.headers || {}).length} headers \u00b7 ${result.http?.duration_ms || 0}ms`}>
+      <SectionCard id="sec-response" title="Response Details"
+        score={result.http?.agcdn_headers?.length ? { value: result.http.agcdn_headers.length, color: "var(--color-text-secondary)" } : undefined}
+        summary={`${result.http?.status_code || "\u2014"} \u00b7 ${Object.keys(result.http?.headers || {}).length} headers \u00b7 ${result.http?.duration_ms || 0}ms`}>
         <ResponseTab result={result} io={io} />
       </SectionCard>
 
-      <SectionCard id="sec-subdomains" title="Subdomains"
-        score={subdomains?.count ? { value: subdomains.count, color: "#666" } : undefined}
-        summary={subdomains?.count ? `${subdomains.count} found via ${subdomains.source}` : "No data"}>
-        <SubdomainsTab subdomains={subdomains || null} />
-      </SectionCard>
+      {/* ── Advanced Tools (grouped) ── */}
+      <div style={{ marginTop: "0.5rem" }}>
+        <div style={{ fontSize: "0.65rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", marginBottom: "0.4rem", paddingLeft: "0.25rem" }}>
+          Advanced Tools
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <SectionCard id="sec-subdomains" title="Subdomains"
+            score={subdomains?.count ? { value: subdomains.count, color: "var(--color-text-secondary)" } : undefined}
+            summary={subdomains?.count ? `${subdomains.count} found via ${subdomains.source}` : "No data"}>
+            <SubdomainsTab subdomains={subdomains || null} />
+          </SectionCard>
 
-      <SectionCard id="sec-agcdn" title="AGCDN Probe" summary="Active AGCDN feature detection">
-        <AGCDNProbeTab domain={domainHost} />
-      </SectionCard>
+          <SectionCard id="sec-agcdn" title="AGCDN Probe" summary="Active feature detection (WAF, IO, Rate Limiting)">
+            <AGCDNProbeTab domain={domainHost} />
+          </SectionCard>
 
-      <SectionCard id="sec-bot" title="Bot Protection" summary="Bot mitigation detection">
-        <BotProtectionTab domain={domainHost} />
-      </SectionCard>
+          <SectionCard id="sec-bot" title="Bot Protection" summary="Challenge page and cookie detection">
+            <BotProtectionTab domain={domainHost} />
+          </SectionCard>
 
-      <SectionCard id="sec-resources" title="Resources" summary="Broken resource audit">
-        <ResourceAuditTab url={result.url} />
-      </SectionCard>
+          <SectionCard id="sec-resources" title="Resources" summary="Broken CSS, JS, and image audit">
+            <ResourceAuditTab url={result.url} />
+          </SectionCard>
+        </div>
+      </div>
     </div>
   );
 }
@@ -634,7 +648,6 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
   };
 
   if (!analysis && !loading) {
-    const selectedCost = AI_MODELS.find(m => m.id === selectedModel)?.cost || "";
     return (
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
@@ -644,12 +657,12 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value)}
           style={{
-            padding: "0.35rem 0.5rem", borderRadius: "4px", border: "1px solid #ddd",
-            fontSize: "0.8rem", color: "#555", background: "#f9fafb",
+            padding: "0.35rem 0.4rem", borderRadius: "4px", border: "1px solid #ddd",
+            fontSize: "0.75rem", color: "#555", background: "#f9fafb", maxWidth: "160px",
           }}
         >
           {AI_MODELS.map(m => (
-            <option key={m.id} value={m.id}>{m.name} ({m.cost})</option>
+            <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
         <button
@@ -665,9 +678,8 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
             <path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5v1h-4v-1C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/>
             <path d="M10 14h4"/><path d="M10 18h4"/><path d="M11 22h2"/>
           </svg>
-          Analyze
+          Analyze with AI
         </button>
-        <span style={{ fontSize: "0.7rem", color: "#aaa" }}>{selectedCost}</span>
       </div>
     );
   }
@@ -696,11 +708,7 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
   if (!analysis) return null;
 
   return (
-    <div style={{
-      marginBottom: "1rem", padding: "1rem 1.25rem", borderRadius: "8px",
-      background: "linear-gradient(135deg, #f8f7ff 0%, #f0f9ff 100%)",
-      border: "1px solid #e0e0f0",
-    }}>
+    <div className="ai-panel">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <h4 style={{ margin: 0, fontSize: "0.95rem", color: "#4f46e5" }}>AI Analysis</h4>
@@ -729,20 +737,14 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
             {analysis.findings.map((f, i) => {
               const isCritical = f.startsWith("CRITICAL:") || /critical|score of \d|grade.?f\b|severe/i.test(f.toLowerCase());
               const isWarning = f.startsWith("WARNING:") || /warning|leaky|insufficient|weak|expir/i.test(f.toLowerCase());
-              const borderColor = isCritical ? "#dc2626" : isWarning ? "#ca8a04" : "#2563eb";
-              const bgColor = isCritical ? "#fef2f2" : isWarning ? "#fffbeb" : "#f0f9ff";
-              // Strip prefix for display
+              const cls = isCritical ? "ai-finding--critical" : isWarning ? "ai-finding--warning" : "ai-finding--info";
               let displayText = f;
               if (f.startsWith("CRITICAL: ")) displayText = f.slice(10);
               else if (f.startsWith("WARNING: ")) displayText = f.slice(9);
               return (
-                <div key={i} style={{
-                  display: "flex", alignItems: "flex-start", gap: "0.5rem",
-                  padding: "0.4rem 0.6rem", borderRadius: "4px", fontSize: "0.82rem",
-                  background: bgColor, borderLeft: `3px solid ${borderColor}`, color: "#333",
-                }}>
-                  {isCritical && <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#dc2626", textTransform: "uppercase", flexShrink: 0, paddingTop: "0.1rem" }}>CRITICAL</span>}
-                  {isWarning && !isCritical && <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#ca8a04", textTransform: "uppercase", flexShrink: 0, paddingTop: "0.1rem" }}>WARNING</span>}
+                <div key={i} className={`ai-finding ${cls}`} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                  {isCritical && <span className="insight-row__category" style={{ color: "var(--color-danger)" }}>CRITICAL</span>}
+                  {isWarning && !isCritical && <span className="insight-row__category" style={{ color: "var(--color-warning)" }}>WARNING</span>}
                   <RenderMarkdown text={displayText} />
                 </div>
               );
@@ -758,12 +760,8 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
           </h5>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
             {analysis.next_steps.map((s, i) => (
-              <div key={i} style={{
-                display: "flex", gap: "0.5rem", padding: "0.4rem 0.6rem",
-                borderRadius: "4px", fontSize: "0.82rem", background: "#f0fdf4",
-                borderLeft: "3px solid #16a34a", color: "#333",
-              }}>
-                <span style={{ fontWeight: 700, color: "#16a34a", flexShrink: 0 }}>{i + 1}.</span>
+              <div key={i} className="ai-step">
+                <span style={{ fontWeight: 700, color: "var(--color-success)", flexShrink: 0 }}>{i + 1}.</span>
                 <RenderMarkdown text={s} />
               </div>
             ))}
@@ -780,7 +778,7 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
           style={{ padding: "0.2rem 0.4rem", borderRadius: "3px", border: "1px solid #ddd", fontSize: "0.75rem", color: "#555" }}
         >
           {AI_MODELS.map(m => (
-            <option key={m.id} value={m.id}>{m.name} ({m.cost})</option>
+            <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
         <button
@@ -791,7 +789,7 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
             background: "#4f46e5", color: "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
           }}
         >
-          {loading ? "..." : "Run"}
+          {loading ? "..." : "Re-analyze"}
         </button>
       </div>
     </div>
@@ -1867,22 +1865,11 @@ function RenderMarkdown({ text }: { text: string }) {
 }
 
 function InsightRow({ insight }: { insight: { severity: string; category: string; message: string } }) {
-  const colors = {
-    error: { bg: "#fef2f2", border: "#dc2626" },
-    warning: { bg: "#fffbeb", border: "#ca8a04" },
-    info: { bg: "#f0f9ff", border: "#2563eb" },
-  };
-  const c = colors[insight.severity as keyof typeof colors] || colors.info;
+  const cls = insight.severity === "error" ? "insight-row--error" : insight.severity === "warning" ? "insight-row--warning" : "insight-row--info";
   return (
-    <div style={{
-      display: "flex", alignItems: "flex-start", gap: "0.5rem",
-      padding: "0.35rem 0.6rem", borderRadius: "4px", fontSize: "0.82rem",
-      background: c.bg, borderLeft: `3px solid ${c.border}`, marginBottom: "0.2rem",
-    }}>
-      <span style={{ fontWeight: 600, fontSize: "0.65rem", textTransform: "uppercase", color: "#888", minWidth: "48px", flexShrink: 0, paddingTop: "0.1rem" }}>
-        {insight.category}
-      </span>
-      <span style={{ color: "#333" }}>{insight.message}</span>
+    <div className={`insight-row ${cls}`}>
+      <span className="insight-row__category">{insight.category}</span>
+      <span>{insight.message}</span>
     </div>
   );
 }

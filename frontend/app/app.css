@@ -5,7 +5,275 @@
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
-/* PDS Toolkit fix: navbar container should span full width */
+/* ── Design Tokens ───────────────────────────────── */
+
+:root {
+  --color-primary: #4f46e5;
+  --color-primary-light: #eef2ff;
+  --color-success: #16a34a;
+  --color-success-light: #f0fdf4;
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-light: #fef2f2;
+  --color-info: #2563eb;
+  --color-info-light: #eff6ff;
+
+  --color-text: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #9ca3af;
+  --color-border: #e5e7eb;
+  --color-surface: #f9fafb;
+  --color-bg: #ffffff;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
+  --space-lg: 1rem;
+  --space-xl: 1.5rem;
+}
+
+/* ── Base ────────────────────────────────────────── */
+
+body {
+  color: var(--color-text);
+  background: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PDS Overrides ───────────────────────────────── */
+
 .pds-navbar__container {
   max-width: none !important;
+}
+
+/* ── Score Cards ─────────────────────────────────── */
+
+.score-card {
+  text-align: center;
+  padding: 0.75rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.score-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.score-card__value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.score-card__label {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 0.2rem;
+}
+
+/* ── Section Cards ───────────────────────────────── */
+
+.section-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: box-shadow 0.15s;
+}
+
+.section-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.section-card--problem {
+  border-left: 3px solid var(--color-danger);
+}
+
+.section-card--warning {
+  border-left: 3px solid var(--color-warning);
+}
+
+.section-card--good {
+  border-left: 3px solid var(--color-success);
+}
+
+.section-card--loading {
+  border-left: 3px solid var(--color-primary);
+}
+
+.section-card__header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.section-card__header:hover {
+  background: var(--color-surface);
+}
+
+.section-card__content {
+  padding: 1rem 1.25rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Insight Rows ────────────────────────────────── */
+
+.insight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  margin-bottom: 0.25rem;
+  line-height: 1.4;
+}
+
+.insight-row--error {
+  background: var(--color-danger-light);
+  border-left: 3px solid var(--color-danger);
+}
+
+.insight-row--warning {
+  background: var(--color-warning-light);
+  border-left: 3px solid var(--color-warning);
+}
+
+.insight-row--info {
+  background: var(--color-info-light);
+  border-left: 3px solid var(--color-info);
+}
+
+.insight-row__category {
+  font-weight: 600;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  min-width: 52px;
+  flex-shrink: 0;
+  padding-top: 0.15rem;
+  letter-spacing: 0.04em;
+}
+
+/* ── AI Panel ────────────────────────────────────── */
+
+.ai-panel {
+  border: 1px solid #ddd5f5;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #faf9ff 0%, #f5f3ff 100%);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.ai-finding {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  margin-bottom: 0.3rem;
+  line-height: 1.4;
+}
+
+.ai-finding--critical {
+  background: var(--color-danger-light);
+  border-left: 3px solid var(--color-danger);
+}
+
+.ai-finding--warning {
+  background: var(--color-warning-light);
+  border-left: 3px solid var(--color-warning);
+}
+
+.ai-finding--info {
+  background: var(--color-info-light);
+  border-left: 3px solid var(--color-info);
+}
+
+.ai-step {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  background: var(--color-success-light);
+  border-left: 3px solid var(--color-success);
+  margin-bottom: 0.3rem;
+  line-height: 1.4;
+}
+
+/* ── Badge ───────────────────────────────────────── */
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.4;
+}
+
+/* ── Metrics Grid ────────────────────────────────── */
+
+.metric-card {
+  text-align: center;
+  padding: 0.5rem 0.25rem;
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+
+.metric-card__value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.metric-card__label {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Tables ──────────────────────────────────────── */
+
+.pds-table {
+  font-size: 0.85rem;
+}
+
+.pds-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary);
+}
+
+/* ── Print styles ────────────────────────────────── */
+
+@media print {
+  .section-card__content { display: block !important; }
+  .pds-navbar, footer { display: none !important; }
+  .score-card { break-inside: avoid; }
 }
