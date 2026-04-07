@@ -13,117 +13,214 @@ import (
 
 // AIAnalysis is the structured response from the AI analysis.
 type AIAnalysis struct {
-	Summary   string   `json:"summary"`
-	Findings  []string `json:"findings"`
-	NextSteps []string `json:"next_steps"`
-	Risk      string   `json:"risk,omitempty"` // "low", "medium", "high"
-	Raw       string   `json:"raw,omitempty"`  // full AI response text
-	DurationMS int64   `json:"duration_ms"`
-	Error     string   `json:"error,omitempty"`
+	Summary    string   `json:"summary"`
+	Findings   []string `json:"findings"`
+	NextSteps  []string `json:"next_steps"`
+	Risk       string   `json:"risk,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	DurationMS int64    `json:"duration_ms"`
+	Error      string   `json:"error,omitempty"`
 }
 
 // AIAnalyzeRequest is the input to the analyze endpoint.
 type AIAnalyzeRequest struct {
-	Check      *Result          `json:"check,omitempty"`
-	SEO        *SEOAudit        `json:"seo,omitempty"`
-	Lighthouse *LighthouseResult `json:"lighthouse,omitempty"`
+	Check      *Result             `json:"check,omitempty"`
+	SEO        *SEOAudit           `json:"seo,omitempty"`
+	Lighthouse *LighthouseResult   `json:"lighthouse,omitempty"`
 	Migration  *MigrationReadiness `json:"migration,omitempty"`
-	CompareA   *Result          `json:"compare_a,omitempty"`
-	CompareB   *Result          `json:"compare_b,omitempty"`
-	Mode       string           `json:"mode"` // "check", "compare", "migration"
+	CompareA   *Result             `json:"compare_a,omitempty"`
+	CompareB   *Result             `json:"compare_b,omitempty"`
+	Mode       string              `json:"mode"`
+	Model      string              `json:"model,omitempty"`
 }
 
-// AnalyzeWithAI sends check results to Claude via Vertex AI for analysis.
+// ModelConfig describes a supported AI model.
+type ModelConfig struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Publisher string  `json:"publisher"` // "anthropic" or "google"
+	Region    string  `json:"region"`
+	VertexID  string  `json:"vertex_id"`
+	CostPer   string  `json:"cost_per"` // estimated cost per analysis
+}
+
+// SupportedModels returns the list of available models.
+func SupportedModels() []ModelConfig {
+	return []ModelConfig{
+		{ID: "claude-opus-4-6", Name: "Claude Opus 4.6", Publisher: "anthropic", Region: "us-east5", VertexID: "claude-opus-4-6@default", CostPer: "~$0.12"},
+		{ID: "claude-sonnet-4-5", Name: "Claude Sonnet 4.5", Publisher: "anthropic", Region: "us-east5", VertexID: "claude-sonnet-4-5-20241022", CostPer: "~$0.024"},
+		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Publisher: "google", Region: "us-east1", VertexID: "gemini-2.5-pro", CostPer: "~$0.014"},
+		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Publisher: "google", Region: "us-east1", VertexID: "gemini-2.5-flash", CostPer: "~$0.001"},
+	}
+}
+
+func getModelConfig(modelID string) ModelConfig {
+	for _, m := range SupportedModels() {
+		if m.ID == modelID {
+			return m
+		}
+	}
+	// Default to Opus
+	return SupportedModels()[0]
+}
+
+// AnalyzeWithAI sends check results to an AI model via Vertex AI for analysis.
 func AnalyzeWithAI(req AIAnalyzeRequest) *AIAnalysis {
 	start := time.Now()
 
-	// Build the prompt based on mode
 	prompt := buildAnalysisPrompt(req)
 	if prompt == "" {
 		return &AIAnalysis{Error: "no data to analyze", DurationMS: time.Since(start).Milliseconds()}
 	}
 
-	// Get access token from metadata server (Cloud Run ADC)
 	token, err := getAccessToken()
 	if err != nil {
 		return &AIAnalysis{Error: "failed to get access token: " + err.Error(), DurationMS: time.Since(start).Milliseconds()}
 	}
 
-	// Call Vertex AI
 	projectID := os.Getenv("GCP_PROJECT_ID")
 	if projectID == "" {
 		projectID = "pantheon-psapps"
 	}
-	region := os.Getenv("VERTEX_AI_REGION")
-	if region == "" {
-		region = "us-east5"
-	}
-	model := os.Getenv("VERTEX_AI_MODEL")
-	if model == "" {
-		model = "claude-opus-4-6@default"
+
+	model := getModelConfig(req.Model)
+	systemPrompt := buildSystemPrompt(req.Mode)
+
+	var rawText string
+	var callErr error
+
+	if model.Publisher == "google" {
+		rawText, callErr = callGemini(token, projectID, model, systemPrompt, prompt)
+	} else {
+		rawText, callErr = callAnthropic(token, projectID, model, systemPrompt, prompt)
 	}
 
+	if callErr != nil {
+		return &AIAnalysis{Error: callErr.Error(), Model: model.Name, DurationMS: time.Since(start).Milliseconds()}
+	}
+
+	analysis := parseAIResponseJSON(rawText)
+	analysis.DurationMS = time.Since(start).Milliseconds()
+	analysis.Model = model.Name
+
+	return analysis
+}
+
+// callAnthropic calls Claude models via Vertex AI rawPredict.
+func callAnthropic(token, projectID string, model ModelConfig, systemPrompt, prompt string) (string, error) {
 	endpoint := fmt.Sprintf(
 		"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/anthropic/models/%s:rawPredict",
-		region, projectID, region, model,
+		model.Region, projectID, model.Region, model.VertexID,
 	)
 
 	body := map[string]any{
 		"anthropic_version": "vertex-2023-10-16",
 		"max_tokens":        2048,
-		"messages": []map[string]string{
-			{"role": "user", "content": prompt},
-		},
-		"system": buildSystemPrompt(req.Mode),
+		"messages":          []map[string]string{{"role": "user", "content": prompt}},
+		"system":            systemPrompt,
 	}
 
 	bodyJSON, _ := json.Marshal(body)
 
 	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewReader(bodyJSON))
 	if err != nil {
-		return &AIAnalysis{Error: "failed to create request: " + err.Error(), DurationMS: time.Since(start).Milliseconds()}
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+token)
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 90 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return &AIAnalysis{Error: "Vertex AI request failed: " + err.Error(), DurationMS: time.Since(start).Milliseconds()}
+		return "", fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-
 	if resp.StatusCode != 200 {
-		return &AIAnalysis{
-			Error:      fmt.Sprintf("Vertex AI returned %d: %s", resp.StatusCode, string(respBody)),
-			DurationMS: time.Since(start).Milliseconds(),
-		}
+		return "", fmt.Errorf("Vertex AI returned %d: %s", resp.StatusCode, truncateStr(string(respBody), 200))
 	}
 
-	// Parse the Anthropic response
 	var aiResp struct {
 		Content []struct {
 			Text string `json:"text"`
 		} `json:"content"`
 	}
 	if err := json.Unmarshal(respBody, &aiResp); err != nil {
-		return &AIAnalysis{Error: "failed to parse AI response: " + err.Error(), DurationMS: time.Since(start).Milliseconds()}
+		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
-
 	if len(aiResp.Content) == 0 {
-		return &AIAnalysis{Error: "empty AI response", DurationMS: time.Since(start).Milliseconds()}
+		return "", fmt.Errorf("empty response")
 	}
 
-	rawText := aiResp.Content[0].Text
+	return aiResp.Content[0].Text, nil
+}
 
-	// Parse structured output from the AI response
-	analysis := parseAIResponse(rawText)
-	analysis.DurationMS = time.Since(start).Milliseconds()
-	analysis.Raw = rawText
+// callGemini calls Gemini models via Vertex AI generateContent.
+func callGemini(token, projectID string, model ModelConfig, systemPrompt, prompt string) (string, error) {
+	endpoint := fmt.Sprintf(
+		"https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+		model.Region, projectID, model.Region, model.VertexID,
+	)
 
-	return analysis
+	body := map[string]any{
+		"contents": []map[string]any{
+			{"role": "user", "parts": []map[string]string{{"text": prompt}}},
+		},
+		"systemInstruction": map[string]any{
+			"parts": []map[string]string{{"text": systemPrompt}},
+		},
+		"generationConfig": map[string]any{
+			"maxOutputTokens": 2048,
+			"temperature":     0.3,
+		},
+	}
+
+	bodyJSON, _ := json.Marshal(body)
+
+	httpReq, err := http.NewRequest("POST", endpoint, bytes.NewReader(bodyJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 90 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("Vertex AI returned %d: %s", resp.StatusCode, truncateStr(string(respBody), 200))
+	}
+
+	var aiResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(respBody, &aiResp); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+	if len(aiResp.Candidates) == 0 || len(aiResp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("empty response")
+	}
+
+	return aiResp.Candidates[0].Content.Parts[0].Text, nil
+}
+
+func truncateStr(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "..."
 }
 
 func buildSystemPrompt(mode string) string {
@@ -131,22 +228,27 @@ func buildSystemPrompt(mode string) string {
 
 Analyze the site check data provided and give actionable, specific insights. Be direct and concise. No filler.
 
-Structure your response EXACTLY like this:
+IMPORTANT: Respond with ONLY a valid JSON object. No markdown, no code fences, no extra text. The JSON must match this exact schema:
 
-SUMMARY
-(2-3 sentence executive summary of the site's overall health)
+{
+  "summary": "2-3 sentence executive summary",
+  "findings": [
+    "specific finding 1",
+    "specific finding 2"
+  ],
+  "next_steps": [
+    "prioritized action item 1",
+    "prioritized action item 2"
+  ],
+  "risk": "low|medium|high"
+}
 
-FINDINGS
-- (specific finding 1)
-- (specific finding 2)
-- (etc.)
-
-NEXT STEPS
-- (prioritized action item 1)
-- (prioritized action item 2)
-- (etc.)
-
-RISK: (low|medium|high)
+Rules for the content:
+- summary: 2-3 sentences covering the overall health of the site
+- findings: 8-12 specific observations, each one sentence. Start critical ones with "CRITICAL:" and warnings with "WARNING:"
+- next_steps: 5-10 prioritized action items, each actionable and specific
+- risk: one of "low", "medium", or "high"
+- Do NOT use markdown formatting in any values. Use plain text only.
 `
 
 	switch mode {
@@ -166,29 +268,29 @@ func buildAnalysisPrompt(req AIAnalyzeRequest) string {
 	case "compare":
 		if req.CompareA != nil {
 			a, _ := json.MarshalIndent(summarizeResult(req.CompareA), "", "  ")
-			parts = append(parts, "## Site A\n```json\n"+string(a)+"\n```")
+			parts = append(parts, "Site A:\n"+string(a))
 		}
 		if req.CompareB != nil {
 			b, _ := json.MarshalIndent(summarizeResult(req.CompareB), "", "  ")
-			parts = append(parts, "## Site B\n```json\n"+string(b)+"\n```")
+			parts = append(parts, "Site B:\n"+string(b))
 		}
 	case "migration":
 		if req.Migration != nil {
 			m, _ := json.MarshalIndent(req.Migration, "", "  ")
-			parts = append(parts, "## Migration Readiness\n```json\n"+string(m)+"\n```")
+			parts = append(parts, "Migration Readiness:\n"+string(m))
 		}
 	default:
 		if req.Check != nil {
 			c, _ := json.MarshalIndent(summarizeResult(req.Check), "", "  ")
-			parts = append(parts, "## Site Check\n```json\n"+string(c)+"\n```")
+			parts = append(parts, "Site Check:\n"+string(c))
 		}
 		if req.SEO != nil {
 			s, _ := json.MarshalIndent(summarizeSEO(req.SEO), "", "  ")
-			parts = append(parts, "## SEO Audit\n```json\n"+string(s)+"\n```")
+			parts = append(parts, "SEO Audit:\n"+string(s))
 		}
 		if req.Lighthouse != nil {
 			l, _ := json.MarshalIndent(req.Lighthouse, "", "  ")
-			parts = append(parts, "## Lighthouse\n```json\n"+string(l)+"\n```")
+			parts = append(parts, "Lighthouse:\n"+string(l))
 		}
 	}
 
@@ -208,7 +310,6 @@ func summarizeResult(r *Result) map[string]any {
 	if r.HTTP != nil {
 		summary["http_status"] = r.HTTP.StatusCode
 		summary["http_duration_ms"] = r.HTTP.DurationMS
-		// Include key headers only
 		keyHeaders := map[string]string{}
 		for _, h := range []string{"cache-control", "x-cache", "age", "server", "strict-transport-security", "content-security-policy", "x-served-by", "agcdn-info", "x-pantheon-styx-hostname", "x-pantheon-environment", "x-pantheon-site"} {
 			if v, ok := r.HTTP.Headers[h]; ok {
@@ -244,7 +345,6 @@ func summarizeResult(r *Result) map[string]any {
 	return summary
 }
 
-// summarizeSEO strips content to fit in prompt.
 func summarizeSEO(s *SEOAudit) map[string]any {
 	return map[string]any{
 		"score":           s.Score,
@@ -261,7 +361,28 @@ func summarizeSEO(s *SEOAudit) map[string]any {
 	}
 }
 
-// parseAIResponse extracts structured data from the AI's text response.
+// parseAIResponseJSON tries to parse the AI response as JSON.
+func parseAIResponseJSON(text string) *AIAnalysis {
+	cleaned := strings.TrimSpace(text)
+	if strings.HasPrefix(cleaned, "```json") {
+		cleaned = strings.TrimPrefix(cleaned, "```json")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+		cleaned = strings.TrimSpace(cleaned)
+	} else if strings.HasPrefix(cleaned, "```") {
+		cleaned = strings.TrimPrefix(cleaned, "```")
+		cleaned = strings.TrimSuffix(cleaned, "```")
+		cleaned = strings.TrimSpace(cleaned)
+	}
+
+	var analysis AIAnalysis
+	if err := json.Unmarshal([]byte(cleaned), &analysis); err == nil {
+		return &analysis
+	}
+
+	return parseAIResponse(text)
+}
+
+// parseAIResponse is a fallback text-based parser.
 func parseAIResponse(text string) *AIAnalysis {
 	analysis := &AIAnalysis{}
 
@@ -269,19 +390,20 @@ func parseAIResponse(text string) *AIAnalysis {
 	section := ""
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		normalized := strings.TrimLeft(trimmed, "# ")
 
 		switch {
-		case trimmed == "SUMMARY":
+		case strings.EqualFold(normalized, "SUMMARY") || strings.EqualFold(normalized, "summary"):
 			section = "summary"
 			continue
-		case trimmed == "FINDINGS":
+		case strings.EqualFold(normalized, "FINDINGS") || strings.EqualFold(normalized, "findings"):
 			section = "findings"
 			continue
-		case trimmed == "NEXT STEPS":
+		case strings.EqualFold(normalized, "NEXT STEPS") || strings.EqualFold(normalized, "next steps"):
 			section = "nextsteps"
 			continue
-		case strings.HasPrefix(trimmed, "RISK:"):
-			risk := strings.TrimSpace(strings.TrimPrefix(trimmed, "RISK:"))
+		case strings.HasPrefix(strings.ToUpper(normalized), "RISK:"):
+			risk := strings.TrimSpace(strings.TrimPrefix(strings.ToUpper(normalized), "RISK:"))
 			analysis.Risk = strings.ToLower(risk)
 			section = ""
 			continue
@@ -301,19 +423,25 @@ func parseAIResponse(text string) *AIAnalysis {
 			if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
 				analysis.Findings = append(analysis.Findings, strings.TrimLeft(trimmed, "-* "))
 			} else if len(analysis.Findings) > 0 {
-				// continuation line
 				analysis.Findings[len(analysis.Findings)-1] += " " + trimmed
 			}
 		case "nextsteps":
-			if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-				analysis.NextSteps = append(analysis.NextSteps, strings.TrimLeft(trimmed, "-* "))
+			stripped := trimmed
+			if strings.HasPrefix(stripped, "- ") || strings.HasPrefix(stripped, "* ") {
+				stripped = strings.TrimLeft(stripped, "-* ")
+			} else if len(stripped) > 2 && stripped[0] >= '0' && stripped[0] <= '9' {
+				if idx := strings.Index(stripped, "."); idx > 0 && idx < 3 {
+					stripped = strings.TrimSpace(stripped[idx+1:])
+				}
+			}
+			if stripped != trimmed {
+				analysis.NextSteps = append(analysis.NextSteps, stripped)
 			} else if len(analysis.NextSteps) > 0 {
 				analysis.NextSteps[len(analysis.NextSteps)-1] += " " + trimmed
 			}
 		}
 	}
 
-	// Fallback: if parsing failed, put everything in summary
 	if analysis.Summary == "" && len(analysis.Findings) == 0 {
 		analysis.Summary = text
 	}
@@ -323,7 +451,6 @@ func parseAIResponse(text string) *AIAnalysis {
 
 // getAccessToken retrieves an access token from the GCP metadata server.
 func getAccessToken() (string, error) {
-	// Try metadata server first (Cloud Run)
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest("GET",
 		"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",

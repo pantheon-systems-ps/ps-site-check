@@ -162,11 +162,11 @@ export default function Compare({ loaderData }: Route.ComponentProps) {
     setCrawlLoading(false);
   };
 
-  const tabItems = [
+  const tabs = [
     {
-      id: "quick",
-      label: "Quick Compare",
-      content: (
+      tabId: "quick",
+      tabLabel: "Quick Compare",
+      panelContent: (
         <div className="pds-spacing-mar-block-start-m">
           <Panel className="pds-spacing-mar-block-end-l">
             <Form method="get">
@@ -193,9 +193,9 @@ export default function Compare({ loaderData }: Route.ComponentProps) {
       ),
     },
     {
-      id: "crawl",
-      label: "Crawl & Compare",
-      content: (
+      tabId: "crawl",
+      tabLabel: "Crawl & Compare",
+      panelContent: (
         <div className="pds-spacing-mar-block-start-m">
           <Callout type="info" title="Site Crawl Comparison" className="pds-spacing-mar-block-end-m">
             <p>Crawls both sites at the selected depth, discovering all same-domain links, and compares URL paths and status codes. Great for migration validation.</p>
@@ -243,7 +243,7 @@ export default function Compare({ loaderData }: Route.ComponentProps) {
         </p>
       </Callout>
 
-      <Tabs tabItems={tabItems} />
+      <Tabs ariaLabel="Comparison mode" tabs={tabs} />
     </>
   );
 }

@@ -57,6 +57,7 @@ export default function AppNavbar() {
         {navLink("/", "Check")}
         {navLink("/batch", "Batch")}
         {navLink("/compare", "Compare")}
+        {navLink("/har", "HAR")}
         {navLink("/migration", "Migration")}
       </div>
     </Navbar>

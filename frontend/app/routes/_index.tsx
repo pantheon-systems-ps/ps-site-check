@@ -1,11 +1,15 @@
 import type { Route } from "./+types/_index";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Form, useNavigation, Link } from "react-router";
-import { Panel, Button, Callout, Tabs } from "@pantheon-systems/pds-toolkit-react";
+import { Panel, Button, Callout } from "@pantheon-systems/pds-toolkit-react";
+import SectionCard from "~/components/SectionCard";
 
 const SITE_CHECK_API =
   process.env.SITE_CHECK_API_URL ||
   "https://api.site-check.ps-pantheon.com";
+
+// Public API URL for client-side fetches (CORS enabled)
+const CLIENT_API = "https://api.site-check.ps-pantheon.com";
 
 /**
  * Pantheon infrastructure resolve targets — mirrors the `hurl` CLI flags.
@@ -195,17 +199,17 @@ export async function loader({ request }: Route.LoaderArgs) {
     try {
       const resp = await fetch(`${SITE_CHECK_API}/result/${resultId}`);
       if (!resp.ok) {
-        return { result: null, error: "Result not found or expired", options: null, subdomains: null, seo: null, lighthouse: null };
+        return { result: null, error: "Result not found or expired", options: null, subdomains: null };
       }
       const result: SiteCheckResult = await resp.json();
-      return { result, error: null, options: null, subdomains: null, seo: null, lighthouse: null };
+      return { result, error: null, options: null, subdomains: null };
     } catch (e) {
-      return { result: null, error: e instanceof Error ? e.message : "Unknown error", options: null, subdomains: null, seo: null, lighthouse: null };
+      return { result: null, error: e instanceof Error ? e.message : "Unknown error", options: null, subdomains: null };
     }
   }
 
   if (!url) {
-    return { result: null, error: null, options: null, subdomains: null, seo: null, lighthouse: null };
+    return { result: null, error: null, options: null, subdomains: null };
   }
 
   const double = params.get("double") === "true";
@@ -232,19 +236,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Extract root domain for subdomain lookup
     const domain = url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
     const subdomainsURL = `${SITE_CHECK_API}/subdomains?domain=${encodeURIComponent(domain)}`;
-    const seoURL = `${SITE_CHECK_API}/seo?url=${encodeURIComponent(url)}`;
-    const lighthouseURL = `${SITE_CHECK_API}/lighthouse?url=${encodeURIComponent("https://" + domain)}&strategy=mobile`;
 
-    // Fetch check + subdomains + SEO + lighthouse concurrently
-    const [checkResp, subResp, seoResp, lhResp] = await Promise.all([
+    // Server-side: only fetch check + subdomains (fast ~300ms)
+    // SEO + Lighthouse load client-side in background (non-blocking)
+    const [checkResp, subResp] = await Promise.all([
       fetch(apiURL.toString()),
       fetch(subdomainsURL).catch(() => null),
-      fetch(seoURL).catch(() => null),
-      fetch(lighthouseURL).catch(() => null),
     ]);
 
     if (!checkResp.ok) {
-      return { result: null, error: `API returned ${checkResp.status}`, options: null, subdomains: null, seo: null, lighthouse: null };
+      return { result: null, error: `API returned ${checkResp.status}`, options: null, subdomains: null };
     }
 
     const result: SiteCheckResult = await checkResp.json();
@@ -255,25 +256,11 @@ export async function loader({ request }: Route.LoaderArgs) {
       subdomains = await subResp.json();
     }
 
-    let seo: any = null;
-    if (seoResp?.ok) {
-      seo = await seoResp.json();
-    }
-
-    let lighthouse: any = null;
-    if (lhResp?.ok) {
-      lighthouse = await lhResp.json();
-    } else if (lhResp) {
-      try { lighthouse = await lhResp.json(); } catch { lighthouse = { error: `PageSpeed API returned ${lhResp.status}` }; }
-    }
-
     return {
       result,
       error: null,
       options: { resolve, resolveLabel, debug, fdebug, warmup, clientIp, userAgent },
       subdomains,
-      seo,
-      lighthouse,
     };
   } catch (e) {
     return {
@@ -281,8 +268,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       error: e instanceof Error ? e.message : "Unknown error",
       options: null,
       subdomains: null,
-      seo: null,
-      lighthouse: null,
     };
   }
 }
@@ -290,7 +275,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 // -- Main component --
 
 export default function Check({ loaderData }: Route.ComponentProps) {
-  const { result, error, options, subdomains, seo, lighthouse } = loaderData;
+  const { result, error, options, subdomains } = loaderData;
   const navigation = useNavigation();
   const isChecking = navigation.state === "loading";
 
@@ -400,7 +385,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
         </Callout>
       )}
 
-      {result && !isChecking && <CheckResults result={result} options={options} subdomains={subdomains} seo={seo} lighthouse={lighthouse} />}
+      {result && !isChecking && <CheckResults result={result} options={options} subdomains={subdomains} />}
     </>
   );
 }
@@ -409,7 +394,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
 
 type CheckOptions = { resolve: string; resolveLabel: string; debug: boolean; fdebug: boolean; warmup: number; clientIp: string; userAgent: string } | null;
 
-function CheckResults({ result, options, subdomains, seo, lighthouse }: { result: SiteCheckResult; options?: CheckOptions; subdomains?: SubdomainResult | null; seo?: any; lighthouse?: any }) {
+function CheckResults({ result, options, subdomains }: { result: SiteCheckResult; options?: CheckOptions; subdomains?: SubdomainResult | null }) {
   const permalinkURL = `/?id=${result.id}`;
   const resolveIP = options?.resolve || result.resolve_ip || "";
   const resolveLabel = resolveIP
@@ -423,173 +408,171 @@ function CheckResults({ result, options, subdomains, seo, lighthouse }: { result
   const cert = classifyCertificate(result.tls);
   const pantheon = detectPantheonSite(headers);
 
+  // Client-side: load SEO and Lighthouse in background
+  const [seo, setSeo] = useState<any>(null);
+  const [seoLoading, setSeoLoading] = useState(true);
+  const [lighthouse, setLighthouse] = useState<any>(null);
+  const [lhLoading, setLhLoading] = useState(true);
+
+  const domain = result.url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+
+  useEffect(() => {
+    // SEO audit (fast, ~1-2s)
+    fetch(`${CLIENT_API}/seo?url=${encodeURIComponent(domain)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setSeo(data); setSeoLoading(false); })
+      .catch(() => setSeoLoading(false));
+
+    // Lighthouse (slow, 15-30s)
+    fetch(`${CLIENT_API}/lighthouse?url=${encodeURIComponent("https://" + domain)}&strategy=mobile`)
+      .then(r => r.json())
+      .then(data => { setLighthouse(data); setLhLoading(false); })
+      .catch(() => setLhLoading(false));
+  }, [domain]);
+
+  const gradeColor = (grade: string) => grade <= "B" ? "#16a34a" : grade <= "C" ? "#ca8a04" : "#dc2626";
+  const scoreColor = (score: number) => score >= 80 ? "#16a34a" : score >= 50 ? "#ca8a04" : "#dc2626";
+  const errors = result.insights.filter(i => i.severity === "error");
+  const warnings = result.insights.filter(i => i.severity === "warning");
+  const infos = result.insights.filter(i => i.severity === "info");
+  const domainHost = result.url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+
   return (
-    <div style={{ marginTop: "1rem" }}>
-      {/* Summary bar */}
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        padding: "0.75rem 1rem", background: "#f9fafb", borderRadius: "8px",
-        marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-          <StatusBadge code={result.http?.status_code} />
-          <span style={{ fontSize: "0.85rem", color: "#666" }}>
-            <strong>{result.url}</strong> in {result.duration_ms}ms
-          </span>
-          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-            <Badge color={cert.color} label={cert.label} />
-            {io.detected && <Badge color="#16a34a" label="IO" />}
-            {pantheon.isPantheon && <Badge color="#4f46e5" label="Pantheon" />}
-            {pantheon.cms && <Badge color="#0891b2" label={pantheon.cms} />}
-          </div>
-        </div>
-        <span style={{ fontSize: "0.75rem", color: "#aaa" }}>
-          <Link to={permalinkURL} style={{ color: "#aaa" }}>Permalink</Link> &middot; <code>{result.id}</code>
-        </span>
-      </div>
-
-      {/* Request options (compact, only if overrides used) */}
-      {(hasOverride || hasDebug) && (
-        <div style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.75rem", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
-          {hasOverride && <span>Resolve: {resolveLabel}</span>}
-          {options?.debug && <span>pantheon-debug</span>}
-          {options?.fdebug && <span>fastly-debug</span>}
-          {options?.clientIp && <span>Client-IP: {options.clientIp}</span>}
-          {options?.warmup ? <span>Warmup: {options.warmup}</span> : null}
-          {options?.userAgent && <span>UA: {BROWSER_USER_AGENTS.find((b) => b.value === options.userAgent)?.label || "Custom"}</span>}
-        </div>
-      )}
-
-      {/* Timing row */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-        gap: "0.5rem", marginBottom: "1rem",
-      }}>
+    <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      {/* Score Dashboard */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "0.5rem" }}>
         {[
-          { label: "DNS", value: result.dns?.duration_ms, unit: "ms" },
-          { label: "HTTP", value: result.http?.duration_ms, unit: "ms" },
-          { label: "TLS", value: result.tls?.duration_ms, unit: "ms" },
-          { label: "Protocol", value: null, display: result.tls?.protocol || "\u2014" },
-        ].map((m, i) => (
-          <div key={i} style={{ textAlign: "center", padding: "0.5rem", background: "#fff", border: "1px solid #e5e7eb", borderRadius: "6px" }}>
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#1a1a1a" }}>
-              {m.display || (m.value != null ? `${m.value}${m.unit}` : "\u2014")}
-            </div>
-            <div style={{ fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.05em" }}>{m.label}</div>
+          { label: "HTTP", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "#16a34a" : result.http?.status_code && result.http.status_code < 400 ? "#ca8a04" : "#dc2626" },
+          { label: "Security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "#999" },
+          { label: "SEO", value: seo?.score ?? (seoLoading ? "..." : "\u2014"), color: seo ? scoreColor(seo.score) : "#999" },
+          { label: "Performance", value: lighthouse?.performance ?? (lhLoading ? "..." : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "#999" },
+          { label: "Email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "#999" },
+          { label: "Pantheon", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "#4f46e5" : "#999" },
+        ].map((s, i) => (
+          <div key={i} style={{ textAlign: "center", padding: "0.6rem 0.25rem", borderRadius: "8px", border: "1px solid #e5e7eb", background: "#fff" }}>
+            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: "0.65rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em", marginTop: "0.15rem" }}>{s.label}</div>
           </div>
         ))}
       </div>
 
-      {/* AI Analysis */}
-      <AIAnalysisPanel result={result} seo={seo} lighthouse={lighthouse} />
+      {/* Context line */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", color: "#aaa" }}>
+        <span>
+          <strong style={{ color: "#666" }}>{result.url}</strong>
+          {" \u00b7 "}{result.duration_ms}ms
+          {result.tls?.protocol && ` \u00b7 ${result.tls.protocol}`}
+          {cert.label !== "Unknown" && ` \u00b7 ${cert.label}`}
+          {pantheon.cms && ` \u00b7 ${pantheon.cms}`}
+        </span>
+        <span><Link to={permalinkURL} style={{ color: "#aaa" }}>Permalink</Link> &middot; <code>{result.id}</code></span>
+      </div>
 
-      {/* Insights — compact list */}
+      {/* ── Insights (grouped by severity, always visible) ── */}
       {result.insights.length > 0 && (
-        <details style={{ marginBottom: "1rem" }}>
-          <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.9rem" }}>
+        <div style={{ border: "1px solid #e5e7eb", borderRadius: "8px", padding: "0.75rem 1rem", background: "#fff" }}>
+          <h4 style={{ margin: "0 0 0.5rem", fontSize: "0.85rem", color: "#1a1a1a" }}>
             Insights ({result.insights.length})
-          </summary>
-          <div style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-            {result.insights.map((insight, i) => (
-              <div key={i} style={{
-                display: "flex", alignItems: "flex-start", gap: "0.5rem",
-                padding: "0.4rem 0.6rem", borderRadius: "4px", fontSize: "0.85rem",
-                background: insight.severity === "error" ? "#fef2f2" : insight.severity === "warning" ? "#fffbeb" : "#f0f9ff",
-                borderLeft: `3px solid ${insight.severity === "error" ? "#dc2626" : insight.severity === "warning" ? "#ca8a04" : "#2563eb"}`,
-              }}>
-                <span style={{ fontWeight: 600, fontSize: "0.7rem", textTransform: "uppercase", color: "#888", minWidth: "55px" }}>
-                  {insight.category}
-                </span>
-                <span>{insight.message}</span>
+          </h4>
+          {errors.length > 0 && (
+            <div style={{ marginBottom: "0.5rem" }}>
+              <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", color: "#dc2626", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
+                Critical ({errors.length})
               </div>
-            ))}
-          </div>
-        </details>
+              {errors.map((insight, i) => <InsightRow key={`e${i}`} insight={insight} />)}
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <div style={{ marginBottom: "0.5rem" }}>
+              <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", color: "#ca8a04", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
+                Warnings ({warnings.length})
+              </div>
+              {warnings.map((insight, i) => <InsightRow key={`w${i}`} insight={insight} />)}
+            </div>
+          )}
+          {infos.length > 0 && (
+            <details>
+              <summary style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", color: "#2563eb", cursor: "pointer", letterSpacing: "0.05em" }}>
+                Info ({infos.length})
+              </summary>
+              <div style={{ marginTop: "0.2rem" }}>
+                {infos.map((insight, i) => <InsightRow key={`i${i}`} insight={insight} />)}
+              </div>
+            </details>
+          )}
+        </div>
       )}
 
-      {/* Flat tab bar — all sections at one level */}
-      <Tabs
-        ariaLabel="Site analysis results"
-        tabs={[
-          {
-            tabId: "response",
-            tabLabel: "Response",
-            tally: result.http?.agcdn_headers?.length
-              ? { label: result.http.agcdn_headers.length, type: "neutral" as const }
-              : undefined,
-            panelContent: <ResponseTab result={result} io={io} />,
-          },
-          {
-            tabId: "dns",
-            tabLabel: "DNS",
-            panelContent: <DnsTab result={result} />,
-          },
-          {
-            tabId: "tls",
-            tabLabel: "TLS",
-            panelContent: <TlsTab result={result} cert={cert} />,
-          },
-          ...(result.security ? [{
-            tabId: "security",
-            tabLabel: "Security",
-            tally: { label: result.security.grade, type: (result.security.score >= 70 ? "success" : result.security.score >= 40 ? "warning" : "critical") as const },
-            panelContent: <SecurityTab security={result.security} />,
-          }] : []),
-          ...(seo ? [{
-            tabId: "seo",
-            tabLabel: "SEO",
-            tally: { label: seo.score, type: (seo.score >= 80 ? "success" : seo.score >= 50 ? "warning" : "critical") as const },
-            panelContent: <SEOTab seo={seo} />,
-          }] : []),
-          ...(lighthouse ? [{
-            tabId: "lighthouse",
-            tabLabel: "Lighthouse",
-            tally: lighthouse.error
-              ? undefined
-              : { label: lighthouse.performance, type: (lighthouse.performance >= 90 ? "success" : lighthouse.performance >= 50 ? "warning" : "critical") as const },
-            panelContent: lighthouse.error
-              ? <div style={{ paddingTop: "1rem" }}><Callout type="warning" title="Lighthouse Unavailable"><p>{lighthouse.error}</p></Callout></div>
-              : <LighthouseTab lighthouse={lighthouse} />,
-          }] : []),
-          {
-            tabId: "pantheon",
-            tabLabel: "Pantheon",
-            tally: pantheon.isPantheon
-              ? { label: "Yes", type: "success" as const }
-              : undefined,
-            panelContent: <PantheonTab result={result} pantheon={pantheon} />,
-          },
-          ...(result.email_auth ? [{
-            tabId: "email",
-            tabLabel: "Email",
-            tally: { label: result.email_auth.grade, type: (result.email_auth.grade <= "B" ? "success" : "warning") as const },
-            panelContent: <EmailAuthTab emailAuth={result.email_auth} />,
-          }] : []),
-          {
-            tabId: "subdomains",
-            tabLabel: "Subdomains",
-            tally: subdomains?.count
-              ? { label: subdomains.count, type: "neutral" as const }
-              : undefined,
-            panelContent: <SubdomainsTab subdomains={subdomains || null} />,
-          },
-          {
-            tabId: "agcdn-probe",
-            tabLabel: "AGCDN Probe",
-            panelContent: <AGCDNProbeTab domain={new URL(result.url).hostname} />,
-          },
-          {
-            tabId: "bot-protection",
-            tabLabel: "Bot Protection",
-            panelContent: <BotProtectionTab domain={new URL(result.url).hostname} />,
-          },
-          {
-            tabId: "resources",
-            tabLabel: "Resources",
-            panelContent: <ResourceAuditTab url={result.url} />,
-          },
-        ]}
-      />
+      {/* ── AI Analysis ── */}
+      <AIAnalysisPanel result={result} seo={seo} lighthouse={lighthouse} />
+
+      {/* ── Collapsible Sections ── */}
+
+      <SectionCard id="sec-perf" title="Performance"
+        score={lighthouse?.performance != null ? { value: lighthouse.performance, color: scoreColor(lighthouse.performance) } : undefined}
+        summary={lighthouse ? `FCP ${lighthouse.fcp || "\u2014"} \u00b7 LCP ${lighthouse.lcp || "\u2014"} \u00b7 ${lighthouse.total_requests || 0} requests` : undefined}
+        loading={lhLoading} loadingMessage="Running Lighthouse audit (15-30s)...">
+        {lighthouse?.error
+          ? <Callout type="warning" title="Lighthouse Unavailable"><p>{lighthouse.error}</p></Callout>
+          : lighthouse && <LighthouseTab lighthouse={lighthouse} />}
+      </SectionCard>
+
+      <SectionCard id="sec-seo" title="SEO"
+        score={seo?.score != null ? { value: seo.score, color: scoreColor(seo.score) } : undefined}
+        summary={seo ? `Title: ${seo.title?.rating || "\u2014"} \u00b7 Sitemap: ${seo.sitemap?.found ? "\u2713" : "\u2717"} \u00b7 ${seo.issues?.length || 0} issues` : undefined}
+        loading={seoLoading} loadingMessage="Running SEO audit...">
+        {seo && <SEOTab seo={seo} />}
+      </SectionCard>
+
+      {result.security && (
+        <SectionCard id="sec-security" title="Security"
+          score={{ value: result.security.grade, color: gradeColor(result.security.grade) }}
+          summary={`${result.security.score}/100 \u00b7 ${result.security.headers.filter(h => h.present).length}/${result.security.headers.length} headers`}>
+          <SecurityTab security={result.security} />
+        </SectionCard>
+      )}
+
+      <SectionCard id="sec-infra" title="Infrastructure"
+        score={pantheon.isPantheon ? { value: "\u2713", color: "#4f46e5" } : undefined}
+        summary={`${result.dns?.a?.[0] || "\u2014"} \u00b7 ${result.tls?.protocol || "\u2014"} \u00b7 ${cert.label}${pantheon.isPantheon ? ` \u00b7 ${result.pantheon?.cdn_tier || "Pantheon"}` : ""}`}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          <DnsTab result={result} />
+          <TlsTab result={result} cert={cert} />
+          {pantheon.isPantheon && <PantheonTab result={result} pantheon={pantheon} />}
+        </div>
+      </SectionCard>
+
+      {result.email_auth && (
+        <SectionCard id="sec-email" title="Email Authentication"
+          score={{ value: result.email_auth.grade, color: gradeColor(result.email_auth.grade) }}
+          summary={`SPF: ${result.email_auth.spf.found ? "\u2713" : "\u2717"} \u00b7 DMARC: ${result.email_auth.dmarc.found ? result.email_auth.dmarc.policy || "\u2713" : "\u2717"}`}>
+          <EmailAuthTab emailAuth={result.email_auth} />
+        </SectionCard>
+      )}
+
+      <SectionCard id="sec-response" title="Response"
+        score={result.http?.agcdn_headers?.length ? { value: result.http.agcdn_headers.length, color: "#666" } : undefined}
+        summary={`Status ${result.http?.status_code || "\u2014"} \u00b7 ${Object.keys(result.http?.headers || {}).length} headers \u00b7 ${result.http?.duration_ms || 0}ms`}>
+        <ResponseTab result={result} io={io} />
+      </SectionCard>
+
+      <SectionCard id="sec-subdomains" title="Subdomains"
+        score={subdomains?.count ? { value: subdomains.count, color: "#666" } : undefined}
+        summary={subdomains?.count ? `${subdomains.count} found via ${subdomains.source}` : "No data"}>
+        <SubdomainsTab subdomains={subdomains || null} />
+      </SectionCard>
+
+      <SectionCard id="sec-agcdn" title="AGCDN Probe" summary="Active AGCDN feature detection">
+        <AGCDNProbeTab domain={domainHost} />
+      </SectionCard>
+
+      <SectionCard id="sec-bot" title="Bot Protection" summary="Bot mitigation detection">
+        <BotProtectionTab domain={domainHost} />
+      </SectionCard>
+
+      <SectionCard id="sec-resources" title="Resources" summary="Broken resource audit">
+        <ResourceAuditTab url={result.url} />
+      </SectionCard>
     </div>
   );
 }
@@ -606,18 +589,28 @@ type AIAnalysis = {
   error: string;
 };
 
+const AI_MODELS = [
+  { id: "claude-opus-4-6", name: "Claude Opus 4.6", cost: "~$0.12" },
+  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", cost: "~$0.024" },
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", cost: "~$0.014" },
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", cost: "~$0.001" },
+];
+
 function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult; seo?: any; lighthouse?: any }) {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-5");
 
   const handleAnalyze = async () => {
     setLoading(true);
+    setAnalysis(null);
     try {
-      const resp = await fetch(`${SITE_CHECK_API}/analyze`, {
+      const resp = await fetch(`${CLIENT_API}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "check",
+          model: selectedModel,
           check: result,
           seo: seo || undefined,
           lighthouse: lighthouse || undefined,
@@ -626,7 +619,7 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
       const data = await resp.json();
       setAnalysis(data);
     } catch (e) {
-      setAnalysis({ summary: "", findings: [], next_steps: [], risk: "", raw: "", duration_ms: 0, error: e instanceof Error ? e.message : "Unknown error" });
+      setAnalysis({ summary: "", findings: [], next_steps: [], risk: "", model: "", duration_ms: 0, error: e instanceof Error ? e.message : "Unknown error" });
     }
     setLoading(false);
   };
@@ -641,23 +634,40 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
   };
 
   if (!analysis && !loading) {
+    const selectedCost = AI_MODELS.find(m => m.id === selectedModel)?.cost || "";
     return (
-      <div style={{ marginBottom: "1rem", textAlign: "center" }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+        padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e7eb", background: "#fff",
+      }}>
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          style={{
+            padding: "0.35rem 0.5rem", borderRadius: "4px", border: "1px solid #ddd",
+            fontSize: "0.8rem", color: "#555", background: "#f9fafb",
+          }}
+        >
+          {AI_MODELS.map(m => (
+            <option key={m.id} value={m.id}>{m.name} ({m.cost})</option>
+          ))}
+        </select>
         <button
           onClick={handleAnalyze}
           style={{
-            display: "inline-flex", alignItems: "center", gap: "0.5rem",
-            padding: "0.5rem 1.25rem", borderRadius: "6px", border: "1px solid #e5e7eb",
-            background: "linear-gradient(135deg, #f0f0ff 0%, #fff 100%)",
-            cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "#4f46e5",
+            display: "inline-flex", alignItems: "center", gap: "0.4rem",
+            padding: "0.4rem 1rem", borderRadius: "6px", border: "none",
+            background: "#4f46e5", color: "#fff",
+            cursor: "pointer", fontSize: "0.8rem", fontWeight: 600,
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5v1h-4v-1C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/>
             <path d="M10 14h4"/><path d="M10 18h4"/><path d="M11 22h2"/>
           </svg>
-          Analyze with AI
+          Analyze
         </button>
+        <span style={{ fontSize: "0.7rem", color: "#aaa" }}>{selectedCost}</span>
       </div>
     );
   }
@@ -692,12 +702,15 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
       border: "1px solid #e0e0f0",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-        <h4 style={{ margin: 0, fontSize: "0.95rem", color: "#4f46e5" }}>AI Analysis</h4>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <h4 style={{ margin: 0, fontSize: "0.95rem", color: "#4f46e5" }}>AI Analysis</h4>
+          {analysis.model && <span style={{ fontSize: "0.7rem", color: "#999", background: "#f3f4f6", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>{analysis.model}</span>}
+        </div>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {analysis.risk && (
             <Badge color={riskColor(analysis.risk)} label={`Risk: ${analysis.risk}`} />
           )}
-          <span style={{ fontSize: "0.7rem", color: "#aaa" }}>{analysis.duration_ms}ms</span>
+          <span style={{ fontSize: "0.7rem", color: "#aaa" }}>{(analysis.duration_ms / 1000).toFixed(1)}s</span>
         </div>
       </div>
 
@@ -709,21 +722,78 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
 
       {analysis.findings && analysis.findings.length > 0 && (
         <div style={{ marginBottom: "0.75rem" }}>
-          <h5 style={{ margin: "0 0 0.35rem", fontSize: "0.8rem", textTransform: "uppercase", color: "#888", letterSpacing: "0.05em" }}>Findings</h5>
-          <ul style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "0.85rem", color: "#444", lineHeight: 1.6 }}>
-            {analysis.findings.map((f, i) => <li key={i}>{f}</li>)}
-          </ul>
+          <h5 style={{ margin: "0 0 0.35rem", fontSize: "0.7rem", textTransform: "uppercase", color: "#888", letterSpacing: "0.05em" }}>
+            Findings ({analysis.findings.length})
+          </h5>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            {analysis.findings.map((f, i) => {
+              const isCritical = f.startsWith("CRITICAL:") || /critical|score of \d|grade.?f\b|severe/i.test(f.toLowerCase());
+              const isWarning = f.startsWith("WARNING:") || /warning|leaky|insufficient|weak|expir/i.test(f.toLowerCase());
+              const borderColor = isCritical ? "#dc2626" : isWarning ? "#ca8a04" : "#2563eb";
+              const bgColor = isCritical ? "#fef2f2" : isWarning ? "#fffbeb" : "#f0f9ff";
+              // Strip prefix for display
+              let displayText = f;
+              if (f.startsWith("CRITICAL: ")) displayText = f.slice(10);
+              else if (f.startsWith("WARNING: ")) displayText = f.slice(9);
+              return (
+                <div key={i} style={{
+                  display: "flex", alignItems: "flex-start", gap: "0.5rem",
+                  padding: "0.4rem 0.6rem", borderRadius: "4px", fontSize: "0.82rem",
+                  background: bgColor, borderLeft: `3px solid ${borderColor}`, color: "#333",
+                }}>
+                  {isCritical && <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#dc2626", textTransform: "uppercase", flexShrink: 0, paddingTop: "0.1rem" }}>CRITICAL</span>}
+                  {isWarning && !isCritical && <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#ca8a04", textTransform: "uppercase", flexShrink: 0, paddingTop: "0.1rem" }}>WARNING</span>}
+                  <RenderMarkdown text={displayText} />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {analysis.next_steps && analysis.next_steps.length > 0 && (
         <div>
-          <h5 style={{ margin: "0 0 0.35rem", fontSize: "0.8rem", textTransform: "uppercase", color: "#888", letterSpacing: "0.05em" }}>Next Steps</h5>
-          <ol style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "0.85rem", color: "#444", lineHeight: 1.6 }}>
-            {analysis.next_steps.map((s, i) => <li key={i}>{s}</li>)}
-          </ol>
+          <h5 style={{ margin: "0 0 0.35rem", fontSize: "0.7rem", textTransform: "uppercase", color: "#888", letterSpacing: "0.05em" }}>
+            Next Steps ({analysis.next_steps.length})
+          </h5>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            {analysis.next_steps.map((s, i) => (
+              <div key={i} style={{
+                display: "flex", gap: "0.5rem", padding: "0.4rem 0.6rem",
+                borderRadius: "4px", fontSize: "0.82rem", background: "#f0fdf4",
+                borderLeft: "3px solid #16a34a", color: "#333",
+              }}>
+                <span style={{ fontWeight: 700, color: "#16a34a", flexShrink: 0 }}>{i + 1}.</span>
+                <RenderMarkdown text={s} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
+
+      {/* Re-analyze with different model */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: "1px solid #e8e8f0" }}>
+        <span style={{ fontSize: "0.75rem", color: "#999" }}>Re-analyze:</span>
+        <select
+          value={selectedModel}
+          onChange={(e) => setSelectedModel(e.target.value)}
+          style={{ padding: "0.2rem 0.4rem", borderRadius: "3px", border: "1px solid #ddd", fontSize: "0.75rem", color: "#555" }}
+        >
+          {AI_MODELS.map(m => (
+            <option key={m.id} value={m.id}>{m.name} ({m.cost})</option>
+          ))}
+        </select>
+        <button
+          onClick={handleAnalyze}
+          disabled={loading}
+          style={{
+            padding: "0.2rem 0.6rem", borderRadius: "4px", border: "none",
+            background: "#4f46e5", color: "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
+          }}
+        >
+          {loading ? "..." : "Run"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1777,6 +1847,58 @@ function EmailAuthTab({ emailAuth }: { emailAuth: NonNullable<SiteCheckResult["e
 }
 
 // -- Shared utilities --
+
+// Renders **bold** and `code` from AI output
+function RenderMarkdown({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return (
+    <span>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith("`") && part.endsWith("`")) {
+          return <code key={i} style={{ fontSize: "0.8rem", background: "#f3f4f6", padding: "0.1rem 0.3rem", borderRadius: "3px" }}>{part.slice(1, -1)}</code>;
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </span>
+  );
+}
+
+function InsightRow({ insight }: { insight: { severity: string; category: string; message: string } }) {
+  const colors = {
+    error: { bg: "#fef2f2", border: "#dc2626" },
+    warning: { bg: "#fffbeb", border: "#ca8a04" },
+    info: { bg: "#f0f9ff", border: "#2563eb" },
+  };
+  const c = colors[insight.severity as keyof typeof colors] || colors.info;
+  return (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: "0.5rem",
+      padding: "0.35rem 0.6rem", borderRadius: "4px", fontSize: "0.82rem",
+      background: c.bg, borderLeft: `3px solid ${c.border}`, marginBottom: "0.2rem",
+    }}>
+      <span style={{ fontWeight: 600, fontSize: "0.65rem", textTransform: "uppercase", color: "#888", minWidth: "48px", flexShrink: 0, paddingTop: "0.1rem" }}>
+        {insight.category}
+      </span>
+      <span style={{ color: "#333" }}>{insight.message}</span>
+    </div>
+  );
+}
+
+function TabSpinner({ message }: { message: string }) {
+  return (
+    <div style={{ textAlign: "center", padding: "2rem 1rem" }}>
+      <svg viewBox="0 0 50 50" width="28" height="28" style={{ margin: "0 auto" }}>
+        <circle cx="25" cy="25" r="20" fill="none" stroke="#4f46e5" strokeWidth="4" strokeDasharray="90 60" strokeLinecap="round">
+          <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
+        </circle>
+      </svg>
+      <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.5rem" }}>{message}</p>
+    </div>
+  );
+}
 
 function StatusBadge({ code }: { code?: number }) {
   if (!code) return <span>{"\u2014"}</span>;

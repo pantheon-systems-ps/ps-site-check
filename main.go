@@ -71,6 +71,7 @@ func main() {
 	mux.HandleFunc("GET /hsts-preload", withMiddleware(handleHSTSPreload))
 	mux.HandleFunc("POST /migration-check", withMiddleware(handleMigrationCheck))
 	mux.HandleFunc("POST /analyze", withMiddleware(handleAnalyze))
+	mux.HandleFunc("GET /models", handleModels)
 	mux.HandleFunc("POST /crawl", withMiddleware(handleCrawl))
 	mux.HandleFunc("POST /compare", withMiddleware(handleCompare))
 	mux.HandleFunc("GET /agcdn-probe", withMiddleware(handleAGCDNProbe))
@@ -524,6 +525,10 @@ func handleHSTSPreload(w http.ResponseWriter, r *http.Request) {
 
 	result := checker.CheckHSTSPreload(domain)
 	writeJSON(w, http.StatusOK, result)
+}
+
+func handleModels(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, checker.SupportedModels())
 }
 
 func handleAnalyze(w http.ResponseWriter, r *http.Request) {
