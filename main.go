@@ -65,6 +65,17 @@ func main() {
 	mux.HandleFunc("GET /dns-history", withMiddleware(handleDNSHistory))
 	mux.HandleFunc("GET /whois", withMiddleware(handleWHOIS))
 	mux.HandleFunc("GET /domain", withMiddleware(handleDomainDetails))
+	mux.HandleFunc("GET /seo", withMiddleware(handleSEO))
+	mux.HandleFunc("GET /crux", withMiddleware(handleCrUX))
+	mux.HandleFunc("GET /lighthouse", withMiddleware(handleLighthouse))
+	mux.HandleFunc("GET /hsts-preload", withMiddleware(handleHSTSPreload))
+	mux.HandleFunc("POST /migration-check", withMiddleware(handleMigrationCheck))
+	mux.HandleFunc("POST /analyze", withMiddleware(handleAnalyze))
+	mux.HandleFunc("POST /crawl", withMiddleware(handleCrawl))
+	mux.HandleFunc("POST /compare", withMiddleware(handleCompare))
+	mux.HandleFunc("GET /agcdn-probe", withMiddleware(handleAGCDNProbe))
+	mux.HandleFunc("GET /bot-protection", withMiddleware(handleBotProtection))
+	mux.HandleFunc("GET /resources", withMiddleware(handleResources))
 	mux.HandleFunc("GET /result/{id}", handleResult)
 	mux.HandleFunc("GET /health", handleHealth)
 
@@ -72,7 +83,7 @@ func main() {
 		Addr:         ":" + port,
 		Handler:      withCORS(mux),
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 60 * time.Second,
+		WriteTimeout: 120 * time.Second, // Lighthouse can take up to 60s
 		IdleTimeout:  120 * time.Second,
 	}
 
@@ -166,6 +177,7 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 		PantheonDebug:   pantheonDebug,
 		FastlyDebug:     fastlyDebug,
 		ClientIP:        q.Get("client_ip"),
+		UserAgent:       q.Get("user_agent"),
 		WarmupRequests:  warmup,
 	}
 
@@ -446,4 +458,204 @@ func cleanCache() {
 			delete(resultCache.items, id)
 		}
 	}
+}
+
+// --- New handlers: SEO, CrUX, Lighthouse, HSTS Preload, Migration ---
+
+func handleSEO(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	rawURL := q.Get("url")
+	if rawURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: url"})
+		return
+	}
+
+	resolve := q.Get("resolve")
+	if resolve != "" {
+		if errMsg := checker.ValidateResolveIP(resolve); errMsg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
+			return
+		}
+	}
+
+	opts := checker.Options{
+		ResolveIP: resolve,
+		UserAgent: q.Get("user_agent"),
+	}
+
+	result := checker.AuditSEO(rawURL, opts)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleCrUX(w http.ResponseWriter, r *http.Request) {
+	origin := r.URL.Query().Get("origin")
+	if origin == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: origin"})
+		return
+	}
+
+	apiKey := os.Getenv("CRUX_API_KEY")
+	result := checker.FetchCrUX(origin, apiKey)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleLighthouse(w http.ResponseWriter, r *http.Request) {
+	rawURL := r.URL.Query().Get("url")
+	if rawURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: url"})
+		return
+	}
+
+	strategy := r.URL.Query().Get("strategy")
+	if strategy == "" {
+		strategy = "mobile"
+	}
+
+	result := checker.FetchLighthouse(rawURL, strategy)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleHSTSPreload(w http.ResponseWriter, r *http.Request) {
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: domain"})
+		return
+	}
+
+	result := checker.CheckHSTSPreload(domain)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleAnalyze(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	var req checker.AIAnalyzeRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	if req.Mode == "" {
+		req.Mode = "check"
+	}
+
+	result := checker.AnalyzeWithAI(req)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleCrawl(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	var req struct {
+		URL   string `json:"url"`
+		Depth int    `json:"depth"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.URL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON body with 'url' field required"})
+		return
+	}
+	if req.Depth < 1 || req.Depth > 3 {
+		req.Depth = 2
+	}
+
+	result := checker.CrawlSite(req.URL, req.Depth)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleCompare(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	var req struct {
+		SiteA string `json:"site_a"`
+		SiteB string `json:"site_b"`
+		Depth int    `json:"depth"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.SiteA == "" || req.SiteB == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON body with 'site_a' and 'site_b' fields required"})
+		return
+	}
+	if req.Depth < 1 || req.Depth > 3 {
+		req.Depth = 2
+	}
+
+	result := checker.CompareSites(req.SiteA, req.SiteB, req.Depth)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleAGCDNProbe(w http.ResponseWriter, r *http.Request) {
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: domain"})
+		return
+	}
+
+	result := checker.ProbeAGCDN(domain)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleBotProtection(w http.ResponseWriter, r *http.Request) {
+	domain := r.URL.Query().Get("domain")
+	if domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: domain"})
+		return
+	}
+
+	result := checker.DetectBotProtection(domain)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleResources(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	rawURL := q.Get("url")
+	if rawURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required parameter: url"})
+		return
+	}
+
+	resolve := q.Get("resolve")
+	if resolve != "" {
+		if errMsg := checker.ValidateResolveIP(resolve); errMsg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
+			return
+		}
+	}
+
+	opts := checker.Options{
+		ResolveIP: resolve,
+		UserAgent: q.Get("user_agent"),
+	}
+
+	result := checker.AuditResources(rawURL, opts)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleMigrationCheck(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		return
+	}
+
+	var req struct {
+		Domain string `json:"domain"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil || req.Domain == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON body with 'domain' field required"})
+		return
+	}
+
+	result := checker.CheckMigrationReadiness(req.Domain)
+	writeJSON(w, http.StatusOK, result)
 }

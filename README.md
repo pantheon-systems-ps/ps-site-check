@@ -2,8 +2,8 @@
 
 Fast site inspection API built in Go. Checks DNS, HTTP headers, and TLS certificates with curated insights for AGCDN investigation.
 
-**Live:** https://ps-site-check-272623337619.us-east1.run.app
-**Custom domain:** https://site-check.ps-pantheon.com
+**API:** https://api.site-check.ps-pantheon.com
+**Frontend:** https://site-check.ps-pantheon.com
 
 ## API Endpoints
 
@@ -18,6 +18,7 @@ GET /check?url=pantheon.io&warmup=5                # cache warmup (5 requests, r
 GET /check?url=pantheon.io&client_ip=203.0.113.1   # spoof Fastly-Client-IP for geo-routing test
 GET /check?url=site.com&resolve=192.0.2.1          # force-resolve to specific IP
 GET /check?url=site.com&debug=false&fdebug=false   # disable debug headers
+GET /check?url=site.com&user_agent=Googlebot/2.1   # spoof User-Agent
 ```
 
 #### Query parameters
@@ -30,6 +31,7 @@ GET /check?url=site.com&debug=false&fdebug=false   # disable debug headers
 | `warmup` | int | Cache warmup test: make N requests (2-20) and report hit ratio |
 | `resolve` | string | Force HTTP/TLS to connect to this IP (like `curl --resolve`) |
 | `client_ip` | string | Send `Fastly-Client-IP` header for geo-routing tests |
+| `user_agent` | string | Custom User-Agent string (default: `ps-site-check/1.0`). Use to simulate browser-specific behavior |
 | `debug` | bool | Send `Pantheon-Debug: 1` header (default: true) |
 | `fdebug` | bool | Send `Fastly-Debug: 1` header (default: true) |
 | `key` | string | API key (if `API_KEY` env var is set) |
@@ -172,6 +174,8 @@ CI/CD: `cloudbuild.yaml` is included. Connect the repo to Cloud Build in the GCP
 - Structured JSON logging (Cloud Run compatible)
 - ~150-300ms typical response time
 
-## Dashboard integration
+## Frontend
 
-The AGCDN Dashboard (agcdn-dash-v2) has a `/check` page that consumes this API server-side. Available at `agcdn.ps-pantheon.com/check`.
+The Site Check frontend is a Remix React Router 7 app in the `frontend/` directory, deployed as a separate Cloud Run service (`ps-site-check-web`) at `site-check.ps-pantheon.com`. It consumes the Go API at `api.site-check.ps-pantheon.com` server-side.
+
+See `frontend/README.md` for setup instructions.

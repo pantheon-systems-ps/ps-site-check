@@ -95,7 +95,11 @@ func checkHTTP(url, hostname string, opts Options) *HTTPResult {
 	if opts.ClientIP != "" {
 		req.Header.Set("Fastly-Client-IP", opts.ClientIP)
 	}
-	req.Header.Set("User-Agent", "ps-site-check/1.0")
+	ua := opts.UserAgent
+	if ua == "" {
+		ua = "ps-site-check/1.0"
+	}
+	req.Header.Set("User-Agent", ua)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -366,7 +370,11 @@ func traceRedirects(startURL, hostname string, opts Options) []RedirectHop {
 		if opts.ClientIP != "" {
 			req.Header.Set("Fastly-Client-IP", opts.ClientIP)
 		}
-		req.Header.Set("User-Agent", "ps-site-check/1.0")
+		ua := opts.UserAgent
+		if ua == "" {
+			ua = "ps-site-check/1.0"
+		}
+		req.Header.Set("User-Agent", ua)
 
 		resp, err := client.Do(req)
 		if err != nil {

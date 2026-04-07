@@ -1,0 +1,27 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check-web:$COMMIT_SHA', './frontend']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check-web:$COMMIT_SHA']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ps-site-check-web'
+      - '--image=us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check-web:$COMMIT_SHA'
+      - '--region=us-east1'
+      - '--allow-unauthenticated'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--max-instances=3'
+      - '--min-instances=0'
+      - '--set-env-vars=SITE_CHECK_API_URL=https://api.site-check.ps-pantheon.com'
+
+images:
+  - 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/ps-site-check-web:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

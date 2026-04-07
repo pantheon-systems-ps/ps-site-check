@@ -19,8 +19,21 @@ checker/
   securitytrails.go  # SecurityTrails API: LookupDNSHistory(), LookupWHOIS(), LookupSubdomainsST(), LookupDomainDetails()
   har.go             # AnalyzeHAR() — HAR file analysis
   validate.go        # ValidateResolveIP() — SSRF prevention
-cloudbuild.yaml      # CI/CD for Cloud Run auto-deploy
-Dockerfile           # Multi-stage Alpine build
+cloudbuild.yaml            # CI/CD for Go API Cloud Run auto-deploy
+cloudbuild-frontend.yaml   # CI/CD for frontend Cloud Run auto-deploy
+Dockerfile                 # Multi-stage Alpine build (Go API)
+frontend/                  # Remix React Router 7 frontend
+  app/
+    routes/_index.tsx      # Single site check (main page)
+    routes/batch.tsx       # Batch check (up to 10 URLs)
+    components/AppNavbar.tsx
+    root.tsx               # App shell (PDS GlobalWrapper, no auth)
+    app.css
+  Dockerfile               # Node.js 20 multi-stage build
+  package.json
+  vite.config.ts
+  react-router.config.ts
+  tsconfig.json
 ```
 
 ## Conventions
@@ -31,9 +44,16 @@ Dockerfile           # Multi-stage Alpine build
 - Insights have severity (info/warning/error) and category (dns/cache/cdn/tls/security)
 - Results get a random hex ID for permalink caching
 
+## Frontend conventions
+
+- Remix React Router 7 + Vite, TypeScript
+- PDS Toolkit React for UI components (Panel, Button, Callout, Tabs, Navbar)
+- No auth required — public tool
+- API URL via `SITE_CHECK_API_URL` env var (defaults to `https://api.site-check.ps-pantheon.com`)
+- Loaders for reads (GET /check), actions for mutations (POST /check-batch)
+
 ## Deployment
 
 - GCP project: `pantheon-psapps`, region: `us-east1`
-- Cloud Run service: `ps-site-check`
-- Custom domain: `site-check.ps-pantheon.com`
-- Consumer: agcdn-dash-v2 `/check` route (server-side fetch)
+- Go API: Cloud Run service `ps-site-check` at `api.site-check.ps-pantheon.com`
+- Frontend: Cloud Run service `ps-site-check-web` at `site-check.ps-pantheon.com`

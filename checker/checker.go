@@ -95,6 +95,27 @@ func Run(rawURL string, opts Options) *Result {
 		result.RedirectChain = traceRedirects(rawURL, hostname, opts)
 	}
 
+	// Security headers scorecard + cookie audit
+	if httpResult != nil && httpResult.Error == "" {
+		result.Security = AuditSecurity(httpResult.Headers)
+	}
+
+	// Enhanced Pantheon platform detection
+	if httpResult != nil && httpResult.Error == "" {
+		dnsA := []string{}
+		dnsCNAME := []string{}
+		if dnsResult != nil {
+			dnsA = dnsResult.A
+			dnsCNAME = dnsResult.CNAME
+		}
+		result.Pantheon = DetectPantheon(httpResult.Headers, dnsA, dnsCNAME)
+	}
+
+	// Email authentication analysis (SPF/DKIM/DMARC)
+	if dnsResult != nil && dnsResult.Error == "" {
+		result.EmailAuth = AuditEmailAuth(hostname, dnsResult.TXT)
+	}
+
 	result.DurationMS = time.Since(start).Milliseconds()
 	result.Insights = generateInsights(dnsResult, dnsMulti, httpResult, result.SecondHTTP, result.Warmup, tlsResult, result.RedirectChain, opts.ResolveIP)
 
