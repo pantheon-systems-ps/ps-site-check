@@ -297,7 +297,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 defaultValue={result?.url?.replace(/^https?:\/\//, "") || ""}
                 required
                 className="pds-input"
-                style={{ width: "100%", padding: "0.5rem 0.75rem" }}
+                style={{ width: "100%", padding: "0.6rem 0.75rem", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", fontSize: "0.95rem" }}
               />
             </div>
             <div style={{ minWidth: "180px" }}>
@@ -605,7 +605,7 @@ type AIAnalysis = {
 
 const AI_MODELS = [
   { id: "claude-opus-4-6", name: "Claude Opus 4.6", cost: "~$0.12" },
-  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", cost: "~$0.024" },
+  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", cost: "~$0.024" },
   { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", cost: "~$0.014" },
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", cost: "~$0.001" },
 ];
@@ -613,7 +613,7 @@ const AI_MODELS = [
 function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult; seo?: any; lighthouse?: any }) {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-5");
+  const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-6");
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -692,7 +692,7 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
             <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
           </circle>
         </svg>
-        <p style={{ color: "#666", fontSize: "0.85rem", marginTop: "0.5rem" }}>Analyzing with Claude Opus...</p>
+        <p style={{ color: "#666", fontSize: "0.85rem", marginTop: "0.5rem" }}>Analyzing with {AI_MODELS.find(m => m.id === selectedModel)?.name || "AI"}...</p>
       </div>
     );
   }

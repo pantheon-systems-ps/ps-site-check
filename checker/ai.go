@@ -48,7 +48,7 @@ type ModelConfig struct {
 func SupportedModels() []ModelConfig {
 	return []ModelConfig{
 		{ID: "claude-opus-4-6", Name: "Claude Opus 4.6", Publisher: "anthropic", Region: "us-east5", VertexID: "claude-opus-4-6@default", CostPer: "~$0.12"},
-		{ID: "claude-sonnet-4-5", Name: "Claude Sonnet 4.5", Publisher: "anthropic", Region: "us-east5", VertexID: "claude-sonnet-4-5-20241022", CostPer: "~$0.024"},
+		{ID: "claude-sonnet-4-6", Name: "Claude Sonnet 4.6", Publisher: "anthropic", Region: "us-east5", VertexID: "claude-sonnet-4-6@default", CostPer: "~$0.024"},
 		{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro", Publisher: "google", Region: "us-east1", VertexID: "gemini-2.5-pro", CostPer: "~$0.014"},
 		{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash", Publisher: "google", Region: "us-east1", VertexID: "gemini-2.5-flash", CostPer: "~$0.001"},
 	}
@@ -171,8 +171,9 @@ func callGemini(token, projectID string, model ModelConfig, systemPrompt, prompt
 			"parts": []map[string]string{{"text": systemPrompt}},
 		},
 		"generationConfig": map[string]any{
-			"maxOutputTokens": 2048,
-			"temperature":     0.3,
+			"maxOutputTokens":  4096,
+			"temperature":      0.3,
+			"responseMimeType": "application/json",
 		},
 	}
 
@@ -364,21 +365,37 @@ func summarizeSEO(s *SEOAudit) map[string]any {
 // parseAIResponseJSON tries to parse the AI response as JSON.
 func parseAIResponseJSON(text string) *AIAnalysis {
 	cleaned := strings.TrimSpace(text)
-	if strings.HasPrefix(cleaned, "```json") {
-		cleaned = strings.TrimPrefix(cleaned, "```json")
-		cleaned = strings.TrimSuffix(cleaned, "```")
-		cleaned = strings.TrimSpace(cleaned)
-	} else if strings.HasPrefix(cleaned, "```") {
-		cleaned = strings.TrimPrefix(cleaned, "```")
-		cleaned = strings.TrimSuffix(cleaned, "```")
+
+	// Strip markdown code fences (```json ... ``` or ``` ... ```)
+	if strings.HasPrefix(cleaned, "```") {
+		// Find the end of the first line (```json or ```)
+		if idx := strings.Index(cleaned, "\n"); idx != -1 {
+			cleaned = cleaned[idx+1:]
+		}
+		// Strip trailing ```
+		if idx := strings.LastIndex(cleaned, "```"); idx != -1 {
+			cleaned = cleaned[:idx]
+		}
 		cleaned = strings.TrimSpace(cleaned)
 	}
 
+	// Try direct JSON parse
 	var analysis AIAnalysis
 	if err := json.Unmarshal([]byte(cleaned), &analysis); err == nil {
 		return &analysis
 	}
 
+	// Try to find JSON object within the text (Gemini sometimes adds text around it)
+	if start := strings.Index(cleaned, "{"); start != -1 {
+		if end := strings.LastIndex(cleaned, "}"); end != -1 && end > start {
+			jsonStr := cleaned[start : end+1]
+			if err := json.Unmarshal([]byte(jsonStr), &analysis); err == nil {
+				return &analysis
+			}
+		}
+	}
+
+	// Fall back to text parser
 	return parseAIResponse(text)
 }
 
