@@ -290,7 +290,7 @@ func buildAnalysisPrompt(req AIAnalyzeRequest) string {
 			parts = append(parts, "SEO Audit:\n"+string(s))
 		}
 		if req.Lighthouse != nil {
-			l, _ := json.MarshalIndent(req.Lighthouse, "", "  ")
+			l, _ := json.MarshalIndent(summarizeLighthouse(req.Lighthouse), "", "  ")
 			parts = append(parts, "Lighthouse:\n"+string(l))
 		}
 	}
@@ -312,17 +312,27 @@ func summarizeResult(r *Result) map[string]any {
 		summary["http_status"] = r.HTTP.StatusCode
 		summary["http_duration_ms"] = r.HTTP.DurationMS
 		keyHeaders := map[string]string{}
-		for _, h := range []string{"cache-control", "x-cache", "age", "server", "strict-transport-security", "content-security-policy", "x-served-by", "agcdn-info", "x-pantheon-styx-hostname", "x-pantheon-environment", "x-pantheon-site"} {
+		for _, h := range []string{"cache-control", "x-cache", "x-cache-hits", "age", "server", "strict-transport-security", "content-security-policy", "x-content-type-options", "x-frame-options", "referrer-policy", "permissions-policy", "vary", "set-cookie", "x-served-by", "agcdn-info", "x-pantheon-styx-hostname", "x-pantheon-environment", "x-pantheon-site", "x-drupal-cache", "x-drupal-dynamic-cache", "x-generator"} {
 			if v, ok := r.HTTP.Headers[h]; ok {
 				keyHeaders[h] = v
 			}
 		}
 		summary["key_headers"] = keyHeaders
+		if len(r.HTTP.AGCDNHeaders) > 0 {
+			summary["agcdn_header_count"] = len(r.HTTP.AGCDNHeaders)
+		}
 	}
 	if r.DNS != nil {
 		summary["dns_a"] = r.DNS.A
 		summary["dns_cname"] = r.DNS.CNAME
+		summary["dns_ns"] = r.DNS.NS
 		summary["dns_duration_ms"] = r.DNS.DurationMS
+		if r.DNS.CAA != nil {
+			summary["dns_caa_count"] = len(r.DNS.CAA)
+		}
+		if r.DNS.DNSSEC != nil {
+			summary["dnssec_enabled"] = r.DNS.DNSSEC.Enabled
+		}
 	}
 	if r.TLS != nil {
 		summary["tls_protocol"] = r.TLS.Protocol
@@ -335,15 +345,128 @@ func summarizeResult(r *Result) map[string]any {
 	if r.Security != nil {
 		summary["security_grade"] = r.Security.Grade
 		summary["security_score"] = r.Security.Score
+		// Include header details so AI can give specific advice
+		missingHeaders := []string{}
+		for _, h := range r.Security.Headers {
+			if !h.Present {
+				missingHeaders = append(missingHeaders, h.Name)
+			}
+		}
+		if len(missingHeaders) > 0 {
+			summary["security_missing_headers"] = missingHeaders
+		}
+		if len(r.Security.Cookies) > 0 {
+			cookieIssues := []string{}
+			for _, c := range r.Security.Cookies {
+				cookieIssues = append(cookieIssues, c.Issues...)
+			}
+			if len(cookieIssues) > 0 {
+				summary["cookie_issues"] = cookieIssues
+			}
+		}
 	}
 	if r.EmailAuth != nil {
 		summary["email_auth_grade"] = r.EmailAuth.Grade
+		if r.EmailAuth.SPF != nil {
+			summary["spf_found"] = r.EmailAuth.SPF.Found
+			summary["spf_valid"] = r.EmailAuth.SPF.Valid
+		}
+		if r.EmailAuth.DMARC != nil {
+			summary["dmarc_found"] = r.EmailAuth.DMARC.Found
+			summary["dmarc_policy"] = r.EmailAuth.DMARC.Policy
+		}
 	}
 	if r.Pantheon != nil {
 		summary["pantheon"] = r.Pantheon
 	}
+	if r.RedirectChain != nil && len(r.RedirectChain) > 0 {
+		summary["redirect_chain_length"] = len(r.RedirectChain)
+	}
+	if r.Warmup != nil {
+		summary["cache_hit_ratio"] = r.Warmup.HitRatio
+	}
 	summary["insights"] = r.Insights
 	return summary
+}
+
+// summarizeLighthouse strips base64 images but keeps all metrics and diagnostics.
+func summarizeLighthouse(l *LighthouseResult) map[string]any {
+	s := map[string]any{
+		"performance":    l.Performance,
+		"accessibility":  l.Accessibility,
+		"best_practices": l.BestPractices,
+		"seo":            l.SEO,
+		"strategy":       l.Strategy,
+	}
+	// Core metrics
+	if l.FCP != "" { s["fcp"] = l.FCP }
+	if l.LCP != "" { s["lcp"] = l.LCP }
+	if l.TBT != "" { s["tbt"] = l.TBT }
+	if l.CLS != "" { s["cls"] = l.CLS }
+	if l.SpeedIndex != "" { s["speed_index"] = l.SpeedIndex }
+	if l.TTI != "" { s["tti"] = l.TTI }
+	if l.TTFB != "" { s["ttfb"] = l.TTFB }
+
+	// Page stats
+	if l.PageWeight > 0 { s["page_weight_bytes"] = l.PageWeight }
+	if l.TotalRequests > 0 { s["total_requests"] = l.TotalRequests }
+	if l.DOMSize > 0 { s["dom_size"] = l.DOMSize }
+
+	// LCP/CLS elements
+	if l.LCPElement != "" { s["lcp_element"] = l.LCPElement }
+	if len(l.CLSElements) > 0 { s["cls_elements"] = l.CLSElements }
+
+	// Resource summary (no images, just structured data)
+	if len(l.ResourceSummary) > 0 { s["resource_summary"] = l.ResourceSummary }
+
+	// Render blocking
+	if len(l.RenderBlocking) > 0 {
+		s["render_blocking_count"] = len(l.RenderBlocking)
+		totalWasted := 0
+		for _, rb := range l.RenderBlocking {
+			totalWasted += rb.WastedMS
+		}
+		s["render_blocking_wasted_ms"] = totalWasted
+	}
+
+	// Third party
+	if len(l.ThirdPartySummary) > 0 {
+		s["third_party_count"] = len(l.ThirdPartySummary)
+		s["third_party_blocking_ms"] = l.ThirdPartyBlockingTime
+	}
+
+	// Main thread work
+	if len(l.MainThreadWork) > 0 { s["main_thread_work"] = l.MainThreadWork }
+
+	// Unused code (just counts and total wasted)
+	if len(l.UnusedJS) > 0 {
+		totalWasted := int64(0)
+		for _, u := range l.UnusedJS {
+			totalWasted += u.WastedBytes
+		}
+		s["unused_js_count"] = len(l.UnusedJS)
+		s["unused_js_wasted_bytes"] = totalWasted
+	}
+	if len(l.UnusedCSS) > 0 {
+		totalWasted := int64(0)
+		for _, u := range l.UnusedCSS {
+			totalWasted += u.WastedBytes
+		}
+		s["unused_css_count"] = len(l.UnusedCSS)
+		s["unused_css_wasted_bytes"] = totalWasted
+	}
+
+	// Cache policy issues
+	if len(l.CachePolicy) > 0 {
+		s["cache_policy_issues"] = len(l.CachePolicy)
+	}
+
+	// Quick/Usable/Resilient assessments
+	if l.IsQuick != nil { s["is_quick"] = l.IsQuick.Rating }
+	if l.IsUsable != nil { s["is_usable"] = l.IsUsable.Rating }
+	if l.IsResilient != nil { s["is_resilient"] = l.IsResilient.Rating }
+
+	return s
 }
 
 func summarizeSEO(s *SEOAudit) map[string]any {
