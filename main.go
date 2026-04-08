@@ -40,8 +40,22 @@ type rateBucket struct {
 	lastReset time.Time
 }
 
-const rateLimit = 30        // requests per window
+const rateLimit = 30        // default requests per window
 const rateWindow = time.Minute
+
+// Tiered rate limits by endpoint cost
+var endpointLimits = map[string]int{
+	"/analyze":         5,   // AI — costs money
+	"/lighthouse":      10,  // hits external API
+	"/seo":             15,
+	"/subdomains":      15,
+	"/dns-history":     15,
+	"/whois":           15,
+	"/crux":            15,
+	"/migration-check": 10,
+	"/crawl":           5,
+	"/compare":         5,
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -113,14 +127,18 @@ func withMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		// Rate limiting
+		// Tiered rate limiting
 		clientIP := r.Header.Get("X-Forwarded-For")
 		if clientIP == "" {
 			clientIP = r.RemoteAddr
 		}
-		if !checkRateLimit(clientIP) {
+		limit := rateLimit
+		if l, ok := endpointLimits[r.URL.Path]; ok {
+			limit = l
+		}
+		if !checkTieredRateLimit(clientIP, r.URL.Path, limit) {
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{
-				"error": "rate limit exceeded — max 30 requests per minute",
+				"error": "rate limit exceeded — max " + strconv.Itoa(limit) + " requests per minute for this endpoint",
 			})
 			return
 		}
@@ -360,11 +378,30 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// allowedOrigins for CORS — restrict to known domains
+var allowedOrigins = map[string]bool{
+	"https://site-check.ps-pantheon.com": true,
+	"http://localhost:5173":              true, // Vite dev
+	"http://localhost:3000":              true,
+}
+
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+
+		if allowedOrigins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else if origin == "" {
+			// No origin = direct API call (curl, server-side), allow
+			w.Header().Set("Access-Control-Allow-Origin", "https://site-check.ps-pantheon.com")
+		}
+		// Don't set the header at all for unknown origins — browser will block
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Recaptcha-Token")
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		w.Header().Set("Vary", "Origin")
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -396,12 +433,22 @@ func logRequest(r *http.Request, duration time.Duration) {
 // --- Rate limiting ---
 
 func checkRateLimit(clientIP string) bool {
+	return checkTieredRateLimit(clientIP, "", rateLimit)
+}
+
+func checkTieredRateLimit(clientIP, path string, limit int) bool {
 	rateLimiter.Lock()
 	defer rateLimiter.Unlock()
 
-	bucket, ok := rateLimiter.clients[clientIP]
+	// Use IP+path as key for per-endpoint limiting
+	key := clientIP
+	if path != "" {
+		key = clientIP + "|" + path
+	}
+
+	bucket, ok := rateLimiter.clients[key]
 	if !ok || time.Since(bucket.lastReset) > rateWindow {
-		rateLimiter.clients[clientIP] = &rateBucket{tokens: rateLimit - 1, lastReset: time.Now()}
+		rateLimiter.clients[key] = &rateBucket{tokens: limit - 1, lastReset: time.Now()}
 		return true
 	}
 
@@ -528,10 +575,27 @@ func handleHSTSPreload(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleModels(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, checker.SupportedModels())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"models":            checker.SupportedModels(),
+		"recaptcha_site_key": os.Getenv("RECAPTCHA_SITE_KEY"),
+	})
 }
 
 func handleAnalyze(w http.ResponseWriter, r *http.Request) {
+	// reCAPTCHA verification (if configured)
+	recaptchaSecret := os.Getenv("RECAPTCHA_SECRET_KEY")
+	if recaptchaSecret != "" {
+		token := r.Header.Get("X-Recaptcha-Token")
+		if token == "" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "reCAPTCHA token required"})
+			return
+		}
+		if !verifyRecaptcha(recaptchaSecret, token) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "reCAPTCHA verification failed"})
+			return
+		}
+	}
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
@@ -550,6 +614,31 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 
 	result := checker.AnalyzeWithAI(req)
 	writeJSON(w, http.StatusOK, result)
+}
+
+// verifyRecaptcha checks a reCAPTCHA v3 token with Google's API.
+func verifyRecaptcha(secret, token string) bool {
+	resp, err := http.PostForm("https://www.google.com/recaptcha/api/siteverify", map[string][]string{
+		"secret":   {secret},
+		"response": {token},
+	})
+	if err != nil {
+		log.Printf("reCAPTCHA verify error: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Success bool    `json:"success"`
+		Score   float64 `json:"score"`
+		Action  string  `json:"action"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false
+	}
+
+	// Score threshold: 0.5+ is likely human (0.0 = bot, 1.0 = human)
+	return result.Success && result.Score >= 0.5
 }
 
 func handleCrawl(w http.ResponseWriter, r *http.Request) {

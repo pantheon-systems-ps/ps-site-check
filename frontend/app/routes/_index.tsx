@@ -266,6 +266,24 @@ export default function Check({ loaderData }: Route.ComponentProps) {
   const navigation = useNavigation();
   const isChecking = navigation.state === "loading";
 
+  // Load reCAPTCHA v3 script dynamically (if configured on API)
+  useEffect(() => {
+    fetch(`${CLIENT_API}/models`)
+      .then(r => r.json())
+      .then(data => {
+        const siteKey = data.recaptcha_site_key;
+        if (siteKey && !document.getElementById("recaptcha-script")) {
+          (window as any).__RECAPTCHA_SITE_KEY = siteKey;
+          const script = document.createElement("script");
+          script.id = "recaptcha-script";
+          script.src = `https://www.google.com/recaptcha/api.js?render=${siteKey}`;
+          script.async = true;
+          document.head.appendChild(script);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       <Panel className="pds-spacing-mar-block-end-l">
@@ -646,9 +664,21 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
     setLoading(true);
     setAnalysis(null);
     try {
+      // Get reCAPTCHA token if available
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (typeof window !== "undefined" && (window as any).grecaptcha) {
+        try {
+          const token = await (window as any).grecaptcha.execute(
+            (window as any).__RECAPTCHA_SITE_KEY,
+            { action: "analyze" }
+          );
+          headers["X-Recaptcha-Token"] = token;
+        } catch { /* reCAPTCHA not loaded, continue without */ }
+      }
+
       const resp = await fetch(`${CLIENT_API}/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           mode: "check",
           model: selectedModel,
