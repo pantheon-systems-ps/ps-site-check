@@ -77,6 +77,12 @@ body > div:first-child > .pds-site-footer {
   max-width: none !important;
 }
 
+/* Force PDS GlobalWrapper to use full width */
+.pds-global-wrapper,
+.pds-global-wrapper > * {
+  max-width: none !important;
+}
+
 /* Form inputs — ensure visible borders */
 .pds-input {
   border: 1px solid var(--color-border) !important;
