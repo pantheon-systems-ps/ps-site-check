@@ -620,16 +620,16 @@ type AIAnalysis = {
 };
 
 const AI_MODELS = [
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6", cost: "~$0.12" },
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", cost: "~$0.024" },
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", cost: "~$0.014" },
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", cost: "~$0.001" },
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", cost: "~$0.014" },
+  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", cost: "~$0.024" },
+  { id: "claude-opus-4-6", name: "Claude Opus 4.6", cost: "~$0.12" },
 ];
 
 function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult; seo?: any; lighthouse?: any }) {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("claude-sonnet-4-6");
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
 
   const handleAnalyze = async () => {
     setLoading(true);
