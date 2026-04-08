@@ -73,7 +73,7 @@ func AnalyzeWithAI(req AIAnalyzeRequest) *AIAnalysis {
 		return &AIAnalysis{Error: "no data to analyze", DurationMS: time.Since(start).Milliseconds()}
 	}
 
-	token, err := getAccessToken()
+	token, err := GetAccessToken()
 	if err != nil {
 		return &AIAnalysis{Error: "failed to get access token: " + err.Error(), DurationMS: time.Since(start).Milliseconds()}
 	}
@@ -589,8 +589,8 @@ func parseAIResponse(text string) *AIAnalysis {
 	return analysis
 }
 
-// getAccessToken retrieves an access token from the GCP metadata server.
-func getAccessToken() (string, error) {
+// GetAccessToken retrieves an access token from the GCP metadata server.
+func GetAccessToken() (string, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
 	req, _ := http.NewRequest("GET",
 		"http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",

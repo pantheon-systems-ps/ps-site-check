@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -360,16 +362,13 @@ func handleResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resultCache.RLock()
-	cached, ok := resultCache.items[id]
-	resultCache.RUnlock()
-
-	if !ok || time.Now().After(cached.expiresAt) {
+	result, ok := loadResult(id)
+	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "result not found or expired"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, cached.result)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func handleAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -494,12 +493,13 @@ func cleanRateLimiter() {
 	}
 }
 
-// --- Result cache ---
+// --- Result cache (in-memory + GCS for persistence) ---
+
+const gcsBucket = "ps-site-check-results"
 
 func cacheResult(result *checker.Result) {
+	// In-memory cache (fast reads)
 	resultCache.Lock()
-	defer resultCache.Unlock()
-
 	if len(resultCache.items) >= maxCacheSize {
 		var oldestID string
 		var oldestTime time.Time
@@ -513,11 +513,97 @@ func cacheResult(result *checker.Result) {
 			delete(resultCache.items, oldestID)
 		}
 	}
-
 	resultCache.items[result.ID] = cachedResult{
 		result:    result,
 		expiresAt: time.Now().Add(cacheTTL),
 	}
+	resultCache.Unlock()
+
+	// Persist to GCS (async, non-blocking)
+	go func() {
+		if err := gcsWrite(result.ID, result); err != nil {
+			log.Printf("GCS write failed for %s: %v", result.ID, err)
+		}
+	}()
+}
+
+func loadResult(id string) (*checker.Result, bool) {
+	// Try in-memory first
+	resultCache.RLock()
+	cached, ok := resultCache.items[id]
+	resultCache.RUnlock()
+	if ok && time.Now().Before(cached.expiresAt) {
+		return cached.result, true
+	}
+
+	// Fall back to GCS
+	result, err := gcsRead(id)
+	if err != nil {
+		return nil, false
+	}
+
+	// Populate in-memory cache for subsequent reads
+	resultCache.Lock()
+	resultCache.items[id] = cachedResult{result: result, expiresAt: time.Now().Add(cacheTTL)}
+	resultCache.Unlock()
+
+	return result, true
+}
+
+func gcsWrite(id string, result *checker.Result) error {
+	token, err := checker.GetAccessToken()
+	if err != nil {
+		return err
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+
+	url := "https://storage.googleapis.com/upload/storage/v1/b/" + gcsBucket + "/o?uploadType=media&name=" + id + ".json"
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GCS upload %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))
+	}
+	return nil
+}
+
+func gcsRead(id string) (*checker.Result, error) {
+	token, err := checker.GetAccessToken()
+	if err != nil {
+		return nil, err
+	}
+
+	url := "https://storage.googleapis.com/storage/v1/b/" + gcsBucket + "/o/" + id + ".json?alt=media"
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("not found")
+	}
+
+	var result checker.Result
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 func cleanCache() {
