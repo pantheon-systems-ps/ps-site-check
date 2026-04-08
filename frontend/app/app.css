@@ -47,6 +47,22 @@ body {
   color: var(--color-text);
   background: var(--color-surface);
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Sticky footer */
+.pds-global-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.pds-global-wrapper > main {
+  flex: 1;
+}
+
+.pds-site-footer {
+  margin-top: auto;
 }
 
 /* ── PDS Overrides ───────────────────────────────── */
