@@ -92,6 +92,7 @@ func main() {
 	mux.HandleFunc("GET /bot-protection", withMiddleware(handleBotProtection))
 	mux.HandleFunc("GET /resources", withMiddleware(handleResources))
 	mux.HandleFunc("GET /result/{id}", handleResult)
+	mux.HandleFunc("GET /analytics", handleAnalytics)
 	mux.HandleFunc("GET /health", handleHealth)
 
 	srv := &http.Server{
@@ -143,10 +144,22 @@ func withMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Structured logging
+		// Structured logging + analytics
 		start := time.Now()
 		next(w, r)
-		logRequest(r, time.Since(start))
+
+		// Extract domain from query params for logging
+		extra := map[string]string{}
+		if domain := r.URL.Query().Get("url"); domain != "" {
+			extra["domain"] = domain
+		} else if domain := r.URL.Query().Get("domain"); domain != "" {
+			extra["domain"] = domain
+		} else if domain := r.URL.Query().Get("origin"); domain != "" {
+			extra["domain"] = domain
+		}
+
+		logRequest(r, time.Since(start), extra)
+		trackRequest(r, 200, extra)
 	}
 }
 
@@ -359,6 +372,10 @@ func handleResult(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cached.result)
 }
 
+func handleAnalytics(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, getAnalytics())
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	resultCache.RLock()
 	cacheSize := len(resultCache.items)
@@ -412,19 +429,25 @@ func withCORS(next http.Handler) http.Handler {
 
 // --- Structured logging ---
 
-func logRequest(r *http.Request, duration time.Duration) {
+func logRequest(r *http.Request, duration time.Duration, extra map[string]string) {
 	entry := map[string]any{
-		"severity":   "INFO",
-		"method":     r.Method,
-		"path":       r.URL.Path,
-		"query":      r.URL.RawQuery,
-		"remote_ip":  r.Header.Get("X-Forwarded-For"),
-		"user_agent": r.UserAgent(),
+		"severity":    "INFO",
+		"method":      r.Method,
+		"path":        r.URL.Path,
+		"query":       r.URL.RawQuery,
+		"remote_ip":   r.Header.Get("X-Forwarded-For"),
+		"user_agent":  r.UserAgent(),
 		"duration_ms": duration.Milliseconds(),
-		"timestamp":  time.Now().UTC().Format(time.RFC3339),
+		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
 	if entry["remote_ip"] == "" {
 		entry["remote_ip"] = r.RemoteAddr
+	}
+	// Add extra fields (domain, model, etc.)
+	for k, v := range extra {
+		if v != "" {
+			entry[k] = v
+		}
 	}
 	b, _ := json.Marshal(entry)
 	log.Println(string(b))
@@ -613,6 +636,10 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := checker.AnalyzeWithAI(req)
+
+	// Track AI model usage in analytics
+	trackRequest(r, 200, map[string]string{"model": req.Model})
+
 	writeJSON(w, http.StatusOK, result)
 }
 

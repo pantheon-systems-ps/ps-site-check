@@ -5,4 +5,5 @@ export default [
   route("batch", "./routes/batch.tsx"),
   route("compare", "./routes/compare.tsx"),
   route("migration", "./routes/migration.tsx"),
+  route("analytics", "./routes/analytics.tsx"),
 ] satisfies RouteConfig;
