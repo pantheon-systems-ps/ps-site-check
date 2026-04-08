@@ -1742,70 +1742,30 @@ function LighthouseTab({ lighthouse }: { lighthouse: any }) {
         </div>
       </Panel>
 
-      {/* Render-blocking resources */}
-      {lighthouse.render_blocking?.length > 0 && (
+      {/* Filmstrip + Screenshot */}
+      {(lighthouse.filmstrip?.length > 0 || lighthouse.final_screenshot) && (
         <Panel>
-          <h4>Render-Blocking Resources ({lighthouse.render_blocking.length})</h4>
-          <table className="pds-table">
-            <thead><tr><th>URL</th><th>Wasted (ms)</th></tr></thead>
-            <tbody>
-              {lighthouse.render_blocking.map((rb: any, i: number) => (
-                <tr key={i}>
-                  <td style={{ fontSize: "0.8rem", wordBreak: "break-all", maxWidth: "500px" }}>{rb.url}</td>
-                  <td style={{ fontWeight: 600, color: rb.wasted_ms > 500 ? "#dc2626" : "#666" }}>{rb.wasted_ms}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
-      )}
-
-      {/* Third-party summary */}
-      {lighthouse.third_party_summary?.length > 0 && (
-        <Panel>
-          <h4>Third-Party Dependencies ({lighthouse.third_party_summary.length})</h4>
-          {lighthouse.third_party_blocking_ms > 0 && (
-            <p style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.5rem" }}>
-              Total third-party blocking time: <strong>{lighthouse.third_party_blocking_ms}ms</strong>
-            </p>
-          )}
-          <table className="pds-table">
-            <thead><tr><th>Entity</th><th>Transfer Size</th><th>Blocking (ms)</th></tr></thead>
-            <tbody>
-              {lighthouse.third_party_summary.map((tp: any, i: number) => (
-                <tr key={i}>
-                  <td style={{ fontSize: "0.85rem" }}>{tp.entity}</td>
-                  <td style={{ fontSize: "0.85rem" }}>{(tp.transfer_size / 1024).toFixed(1)} KB</td>
-                  <td style={{ fontWeight: 600, color: tp.blocking_time_ms > 250 ? "#dc2626" : "#666" }}>{tp.blocking_time_ms}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
-      )}
-
-      {/* Final Screenshot */}
-      {lighthouse.final_screenshot && (
-        <Panel>
-          <h4>Page Screenshot</h4>
-          <div style={{ textAlign: "center", background: "var(--color-surface)", padding: "0.5rem", borderRadius: "var(--radius-sm)" }}>
-            <img src={lighthouse.final_screenshot} alt="Final page screenshot" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "4px", border: "1px solid var(--color-border)" }} />
-          </div>
-        </Panel>
-      )}
-
-      {/* Filmstrip */}
-      {lighthouse.filmstrip?.length > 0 && (
-        <Panel>
-          <h4>Visual Progress (Filmstrip)</h4>
-          <div style={{ display: "flex", gap: "2px", overflowX: "auto", padding: "0.5rem 0" }}>
-            {lighthouse.filmstrip.filter((_: any, i: number) => i % 3 === 0).map((frame: any, i: number) => (
-              <div key={i} style={{ flexShrink: 0, textAlign: "center" }}>
-                <img src={frame.data} alt={`${frame.timing}ms`} style={{ height: "80px", borderRadius: "2px", border: "1px solid var(--color-border)" }} />
-                <div style={{ fontSize: "0.6rem", color: "var(--color-text-muted)", marginTop: "2px" }}>{(frame.timing / 1000).toFixed(1)}s</div>
+          {lighthouse.filmstrip?.length > 0 && (
+            <>
+              <h4>Visual Progress</h4>
+              <div style={{ display: "flex", gap: "2px", overflowX: "auto", padding: "0.25rem 0 0.5rem" }}>
+                {lighthouse.filmstrip.filter((_: any, i: number) => i % 3 === 0).map((frame: any, i: number) => (
+                  <div key={i} style={{ flexShrink: 0, textAlign: "center" }}>
+                    <img src={frame.data} alt={`${frame.timing}ms`} style={{ height: "80px", borderRadius: "2px", border: "1px solid var(--color-border)" }} />
+                    <div style={{ fontSize: "0.6rem", color: "var(--color-text-muted)", marginTop: "2px" }}>{(frame.timing / 1000).toFixed(1)}s</div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
+          {lighthouse.final_screenshot && (
+            <details style={{ marginTop: lighthouse.filmstrip?.length > 0 ? "0.5rem" : 0 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.85rem" }}>Full Page Screenshot</summary>
+              <div style={{ textAlign: "center", background: "var(--color-surface)", padding: "0.5rem", borderRadius: "var(--radius-sm)", marginTop: "0.5rem" }}>
+                <img src={lighthouse.final_screenshot} alt="Final page screenshot" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "4px", border: "1px solid var(--color-border)" }} />
+              </div>
+            </details>
+          )}
         </Panel>
       )}
 
@@ -1908,6 +1868,54 @@ function LighthouseTab({ lighthouse }: { lighthouse: any }) {
               </div>
             </div>
           </details>
+        </Panel>
+      )}
+
+      {/* Render-Blocking + Third-Party (collapsed) */}
+      {(lighthouse.render_blocking?.length > 0 || lighthouse.third_party_summary?.length > 0) && (
+        <Panel>
+          {lighthouse.render_blocking?.length > 0 && (
+            <details>
+              <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.9rem" }}>
+                Render-Blocking Resources ({lighthouse.render_blocking.length})
+              </summary>
+              <table className="pds-table" style={{ marginTop: "0.5rem" }}>
+                <thead><tr><th>URL</th><th>Wasted (ms)</th></tr></thead>
+                <tbody>
+                  {lighthouse.render_blocking.map((rb: any, i: number) => (
+                    <tr key={i}>
+                      <td style={{ fontSize: "0.78rem", wordBreak: "break-all", maxWidth: "500px" }}>{rb.url}</td>
+                      <td style={{ fontWeight: 600, color: rb.wasted_ms > 500 ? "var(--color-danger)" : "var(--color-text-secondary)" }}>{rb.wasted_ms}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+          {lighthouse.third_party_summary?.length > 0 && (
+            <details style={{ marginTop: lighthouse.render_blocking?.length > 0 ? "0.75rem" : 0 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.9rem" }}>
+                Third-Party Dependencies ({lighthouse.third_party_summary.length})
+                {lighthouse.third_party_blocking_ms > 0 && (
+                  <span style={{ fontWeight: 400, fontSize: "0.78rem", color: "var(--color-text-muted)", marginLeft: "0.5rem" }}>
+                    {lighthouse.third_party_blocking_ms}ms blocking
+                  </span>
+                )}
+              </summary>
+              <table className="pds-table" style={{ marginTop: "0.5rem" }}>
+                <thead><tr><th>Entity</th><th>Size</th><th>Blocking</th></tr></thead>
+                <tbody>
+                  {lighthouse.third_party_summary.map((tp: any, i: number) => (
+                    <tr key={i}>
+                      <td style={{ fontSize: "0.82rem" }}>{tp.entity}</td>
+                      <td style={{ fontSize: "0.82rem" }}>{(tp.transfer_size / 1024).toFixed(1)} KB</td>
+                      <td style={{ fontWeight: 600, color: tp.blocking_time_ms > 250 ? "var(--color-danger)" : "var(--color-text-secondary)" }}>{tp.blocking_time_ms}ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
         </Panel>
       )}
 

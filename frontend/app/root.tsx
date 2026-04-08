@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
           <GlobalWrapper>
             <AppNavbar />
-            <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "1.5rem", flex: 1 }}>
+            <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "1.5rem 2rem", flex: 1 }}>
               {children}
             </main>
             <SiteFooter containerWidth="full" />
