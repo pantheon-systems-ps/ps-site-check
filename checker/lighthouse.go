@@ -116,6 +116,37 @@ func FetchLighthouse(targetURL, strategy string) *LighthouseResult {
 	result.IsUsable = assessUsable(result)
 	result.IsResilient = assessResilient(result)
 
+	// Final screenshot
+	result.FinalScreenshot = getScreenshot(audits, "final-screenshot")
+
+	// Filmstrip
+	result.Filmstrip = getFilmstrip(audits)
+
+	// Network requests (limit to first 100)
+	result.NetworkRequests = getNetworkRequests(audits)
+
+	// Resource summary
+	result.ResourceSummary = getResourceSummary(audits)
+
+	// Main thread work
+	result.MainThreadWork = getMainThreadWork(audits)
+
+	// Unused JS/CSS
+	result.UnusedJS = getUnusedResources(audits, "unused-javascript")
+	result.UnusedCSS = getUnusedResources(audits, "unused-css-rules")
+
+	// Cache policy
+	result.CachePolicy = getCachePolicy(audits)
+
+	// LCP element
+	result.LCPElement = getLCPElement(audits)
+
+	// CLS elements
+	result.CLSElements = getCLSElements(audits)
+
+	// DOM size
+	result.DOMSize = int(getNumericValue(audits, "dom-size"))
+
 	return result
 }
 
@@ -469,6 +500,244 @@ func getCLS(display string) float64 {
 	var val float64
 	fmt.Sscanf(display, "%f", &val)
 	return val
+}
+
+// -- Extended audit extraction helpers --
+
+func getScreenshot(audits map[string]json.RawMessage, key string) string {
+	raw, ok := audits[key]
+	if !ok {
+		return ""
+	}
+	var a struct {
+		Details struct {
+			Data string `json:"data"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+	return a.Details.Data
+}
+
+func getFilmstrip(audits map[string]json.RawMessage) []FilmstripFrame {
+	raw, ok := audits["screenshot-thumbnails"]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				Timing int    `json:"timing"`
+				Data   string `json:"data"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	var frames []FilmstripFrame
+	for _, item := range a.Details.Items {
+		frames = append(frames, FilmstripFrame{
+			Timing: item.Timing,
+			Data:   item.Data,
+		})
+	}
+	return frames
+}
+
+func getNetworkRequests(audits map[string]json.RawMessage) []NetworkRequest {
+	raw, ok := audits["network-requests"]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				URL          string  `json:"url"`
+				ResourceType string  `json:"resourceType"`
+				StartTime    float64 `json:"startTime"`
+				EndTime      float64 `json:"endTime"`
+				TransferSize float64 `json:"transferSize"`
+				StatusCode   int     `json:"statusCode"`
+				Protocol     string  `json:"protocol"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	limit := len(a.Details.Items)
+	if limit > 100 {
+		limit = 100
+	}
+
+	var reqs []NetworkRequest
+	for _, item := range a.Details.Items[:limit] {
+		reqs = append(reqs, NetworkRequest{
+			URL:          item.URL,
+			ResourceType: item.ResourceType,
+			StartTime:    item.StartTime,
+			EndTime:      item.EndTime,
+			TransferSize: int64(item.TransferSize),
+			StatusCode:   item.StatusCode,
+			Protocol:     item.Protocol,
+		})
+	}
+	return reqs
+}
+
+func getResourceSummary(audits map[string]json.RawMessage) []ResourceSummaryItem {
+	raw, ok := audits["resource-summary"]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				ResourceType string  `json:"resourceType"`
+				Label        string  `json:"label"`
+				RequestCount int     `json:"requestCount"`
+				TransferSize float64 `json:"transferSize"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	var items []ResourceSummaryItem
+	for _, item := range a.Details.Items {
+		items = append(items, ResourceSummaryItem{
+			ResourceType: item.ResourceType,
+			Label:        item.Label,
+			RequestCount: item.RequestCount,
+			TransferSize: int64(item.TransferSize),
+		})
+	}
+	return items
+}
+
+func getMainThreadWork(audits map[string]json.RawMessage) []MainThreadItem {
+	raw, ok := audits["mainthread-work-breakdown"]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				Group    string  `json:"group"`
+				Duration float64 `json:"duration"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	var items []MainThreadItem
+	for _, item := range a.Details.Items {
+		items = append(items, MainThreadItem{
+			Group:    item.Group,
+			Duration: item.Duration,
+		})
+	}
+	return items
+}
+
+func getUnusedResources(audits map[string]json.RawMessage, key string) []UnusedResource {
+	raw, ok := audits[key]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				URL        string  `json:"url"`
+				TotalBytes float64 `json:"totalBytes"`
+				WastedBytes float64 `json:"wastedBytes"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	var items []UnusedResource
+	for _, item := range a.Details.Items {
+		items = append(items, UnusedResource{
+			URL:        item.URL,
+			TotalBytes: int64(item.TotalBytes),
+			WastedBytes: int64(item.WastedBytes),
+		})
+	}
+	return items
+}
+
+func getCachePolicy(audits map[string]json.RawMessage) []CachePolicyItem {
+	raw, ok := audits["uses-long-cache-ttl"]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				URL              string  `json:"url"`
+				CacheHitProb     float64 `json:"cacheHitProbability"`
+				TotalBytes       float64 `json:"totalBytes"`
+				CacheLifetimeMs  float64 `json:"cacheLifetimeMs"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	var items []CachePolicyItem
+	for _, item := range a.Details.Items {
+		items = append(items, CachePolicyItem{
+			URL:        item.URL,
+			CacheHit:   item.CacheHitProb,
+			TotalBytes: int64(item.TotalBytes),
+			CacheTTL:   item.CacheLifetimeMs / 1000, // convert ms to seconds
+		})
+	}
+	return items
+}
+
+func getLCPElement(audits map[string]json.RawMessage) string {
+	raw, ok := audits["largest-contentful-paint-element"]
+	if !ok {
+		return ""
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				Node struct {
+					Snippet string `json:"snippet"`
+				} `json:"node"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	if len(a.Details.Items) > 0 {
+		return a.Details.Items[0].Node.Snippet
+	}
+	return ""
+}
+
+func getCLSElements(audits map[string]json.RawMessage) []string {
+	raw, ok := audits["layout-shift-elements"]
+	if !ok {
+		return nil
+	}
+	var a struct {
+		Details struct {
+			Items []struct {
+				Node struct {
+					Snippet string `json:"snippet"`
+				} `json:"node"`
+			} `json:"items"`
+		} `json:"details"`
+	}
+	json.Unmarshal(raw, &a)
+
+	var elements []string
+	for _, item := range a.Details.Items {
+		if item.Node.Snippet != "" {
+			elements = append(elements, item.Node.Snippet)
+		}
+	}
+	return elements
 }
 
 // truncate shortens a string to maxLen, appending "..." if truncated.

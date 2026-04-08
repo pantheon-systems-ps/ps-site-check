@@ -363,6 +363,75 @@ type LighthouseResult struct {
 	IsQuick     *WPTAssessment `json:"is_quick,omitempty"`
 	IsUsable    *WPTAssessment `json:"is_usable,omitempty"`
 	IsResilient *WPTAssessment `json:"is_resilient,omitempty"`
+
+	// Visual
+	FinalScreenshot string           `json:"final_screenshot,omitempty"` // base64 data URI
+	Filmstrip       []FilmstripFrame `json:"filmstrip,omitempty"`
+
+	// Network
+	NetworkRequests []NetworkRequest `json:"network_requests,omitempty"`
+
+	// Asset breakdown
+	ResourceSummary []ResourceSummaryItem `json:"resource_summary,omitempty"`
+
+	// CPU
+	MainThreadWork []MainThreadItem `json:"main_thread_work,omitempty"`
+
+	// Optimization opportunities
+	UnusedJS    []UnusedResource  `json:"unused_js,omitempty"`
+	UnusedCSS   []UnusedResource  `json:"unused_css,omitempty"`
+	CachePolicy []CachePolicyItem `json:"cache_policy,omitempty"`
+
+	// Diagnostics
+	LCPElement  string   `json:"lcp_element,omitempty"`
+	CLSElements []string `json:"cls_elements,omitempty"`
+	DOMSize     int      `json:"dom_size,omitempty"`
+}
+
+// FilmstripFrame is one frame from the filmstrip (screenshot-thumbnails audit).
+type FilmstripFrame struct {
+	Timing int    `json:"timing"` // ms
+	Data   string `json:"data"`   // base64 data URI
+}
+
+// NetworkRequest is a single network request from the network-requests audit.
+type NetworkRequest struct {
+	URL          string  `json:"url"`
+	ResourceType string  `json:"resource_type"`
+	StartTime    float64 `json:"start_time"`  // ms
+	EndTime      float64 `json:"end_time"`    // ms
+	TransferSize int64   `json:"transfer_size"`
+	StatusCode   int     `json:"status_code"`
+	Protocol     string  `json:"protocol,omitempty"`
+}
+
+// ResourceSummaryItem is one row from the resource-summary audit.
+type ResourceSummaryItem struct {
+	ResourceType string `json:"resource_type"`
+	Label        string `json:"label"`
+	RequestCount int    `json:"request_count"`
+	TransferSize int64  `json:"transfer_size"`
+}
+
+// MainThreadItem is one row from the mainthread-work-breakdown audit.
+type MainThreadItem struct {
+	Group    string  `json:"group"`
+	Duration float64 `json:"duration"` // ms
+}
+
+// UnusedResource is one item from unused-javascript or unused-css-rules audits.
+type UnusedResource struct {
+	URL        string `json:"url"`
+	TotalBytes int64  `json:"total_bytes"`
+	WastedBytes int64 `json:"wasted_bytes"`
+}
+
+// CachePolicyItem is one item from the uses-long-cache-ttl audit.
+type CachePolicyItem struct {
+	URL        string  `json:"url"`
+	CacheHit   float64 `json:"cache_hit_probability"`
+	TotalBytes int64   `json:"total_bytes"`
+	CacheTTL   float64 `json:"cache_ttl"` // seconds
 }
 
 // RenderBlockingItem is a resource that blocks rendering.
