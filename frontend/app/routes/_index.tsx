@@ -398,8 +398,10 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
   // Client-side: load SEO and Lighthouse in background
   const [seo, setSeo] = useState<any>(null);
   const [seoLoading, setSeoLoading] = useState(true);
-  const [lighthouse, setLighthouse] = useState<any>(null);
-  const [lhLoading, setLhLoading] = useState(true);
+  const [lhMobile, setLhMobile] = useState<any>(null);
+  const [lhDesktop, setLhDesktop] = useState<any>(null);
+  const [lhMobileLoading, setLhMobileLoading] = useState(true);
+  const [lhDesktopLoading, setLhDesktopLoading] = useState(true);
   const [subdomains, setSubdomains] = useState<SubdomainResult | null>(null);
   const [subLoading, setSubLoading] = useState(false);
 
@@ -415,18 +417,29 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
   };
 
   useEffect(() => {
+    const lhUrl = `${CLIENT_API}/lighthouse?url=${encodeURIComponent("https://" + domain)}`;
+
     // SEO audit (fast, ~1-2s)
     fetch(`${CLIENT_API}/seo?url=${encodeURIComponent(domain)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => { setSeo(data); setSeoLoading(false); })
       .catch(() => setSeoLoading(false));
 
-    // Lighthouse (slow, 15-30s)
-    fetch(`${CLIENT_API}/lighthouse?url=${encodeURIComponent("https://" + domain)}&strategy=mobile`)
+    // Lighthouse — run mobile + desktop in parallel
+    fetch(`${lhUrl}&strategy=mobile`)
       .then(r => r.json())
-      .then(data => { setLighthouse(data); setLhLoading(false); })
-      .catch(() => setLhLoading(false));
+      .then(data => { setLhMobile(data); setLhMobileLoading(false); })
+      .catch(() => setLhMobileLoading(false));
+
+    fetch(`${lhUrl}&strategy=desktop`)
+      .then(r => r.json())
+      .then(data => { setLhDesktop(data); setLhDesktopLoading(false); })
+      .catch(() => setLhDesktopLoading(false));
   }, [domain]);
+
+  // Use mobile as the primary for score dashboard; either for AI analysis
+  const lighthouse = lhMobile || lhDesktop;
+  const lhLoading = lhMobileLoading && lhDesktopLoading;
 
   const gradeColor = (grade: string) => grade <= "B" ? "#16a34a" : grade <= "C" ? "#ca8a04" : "#dc2626";
   const scoreColor = (score: number) => score >= 80 ? "#16a34a" : score >= 50 ? "#ca8a04" : "#dc2626";
@@ -511,10 +524,8 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
         status={lighthouse?.performance ? (lighthouse.performance >= 80 ? "good" : lighthouse.performance >= 50 ? "warning" : "problem") : lhLoading ? "loading" : "neutral"}
         score={lighthouse?.performance != null ? { value: lighthouse.performance, color: scoreColor(lighthouse.performance) } : undefined}
         summary={lighthouse ? `FCP ${lighthouse.fcp || "\u2014"} \u00b7 LCP ${lighthouse.lcp || "\u2014"} \u00b7 ${lighthouse.total_requests || 0} requests` : undefined}
-        loading={lhLoading} loadingMessage="Running Lighthouse audit (15-30s)...">
-        {lighthouse?.error
-          ? <Callout type="warning" title="Lighthouse Unavailable"><p>{lighthouse.error}</p></Callout>
-          : lighthouse && <LighthouseTab lighthouse={lighthouse} />}
+        loading={lhMobileLoading && lhDesktopLoading} loadingMessage="Running Lighthouse audits (mobile + desktop)...">
+        <LighthouseStrategyTabs mobile={lhMobile} desktop={lhDesktop} mobileLoading={lhMobileLoading} desktopLoading={lhDesktopLoading} />
       </SectionCard>
 
       <SectionCard id="sec-seo" title="SEO"
@@ -1587,6 +1598,64 @@ function SEOTab({ seo }: { seo: any }) {
 }
 
 // -- Tab: Lighthouse --
+
+function LighthouseStrategyTabs({ mobile, desktop, mobileLoading, desktopLoading }: { mobile: any; desktop: any; mobileLoading: boolean; desktopLoading: boolean }) {
+  const [active, setActive] = useState<"mobile" | "desktop">("mobile");
+  const data = active === "mobile" ? mobile : desktop;
+  const isLoading = active === "mobile" ? mobileLoading : desktopLoading;
+
+  return (
+    <div>
+      {/* Tab buttons */}
+      <div style={{ display: "flex", gap: "0.25rem", marginBottom: "1rem" }}>
+        {(["mobile", "desktop"] as const).map(s => {
+          const d = s === "mobile" ? mobile : desktop;
+          const loading = s === "mobile" ? mobileLoading : desktopLoading;
+          const isActive = s === active;
+          return (
+            <button key={s} onClick={() => setActive(s)} style={{
+              padding: "0.4rem 1rem", borderRadius: "var(--radius-full)",
+              border: isActive ? "1px solid var(--color-primary)" : "1px solid var(--color-border)",
+              background: isActive ? "var(--color-primary)" : "var(--color-bg)",
+              color: isActive ? "#fff" : "var(--color-text-secondary)",
+              fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
+              display: "flex", alignItems: "center", gap: "0.35rem", textTransform: "capitalize",
+            }}>
+              {s}
+              {loading && (
+                <svg viewBox="0 0 50 50" width="12" height="12">
+                  <circle cx="25" cy="25" r="20" fill="none" stroke={isActive ? "#fff" : "var(--color-primary)"} strokeWidth="6" strokeDasharray="90 60" strokeLinecap="round">
+                    <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              )}
+              {!loading && d?.performance != null && (
+                <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>({d.performance})</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {isLoading && (
+        <div style={{ textAlign: "center", padding: "2rem" }}>
+          <svg viewBox="0 0 50 50" width="24" height="24" style={{ margin: "0 auto" }}>
+            <circle cx="25" cy="25" r="20" fill="none" stroke="var(--color-primary)" strokeWidth="4" strokeDasharray="90 60" strokeLinecap="round">
+              <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
+            </circle>
+          </svg>
+          <p style={{ color: "var(--color-text-muted)", fontSize: "0.82rem", marginTop: "0.5rem" }}>Running {active} Lighthouse audit...</p>
+        </div>
+      )}
+
+      {!isLoading && data?.error && (
+        <Callout type="warning" title="Lighthouse Unavailable"><p>{data.error}</p></Callout>
+      )}
+
+      {!isLoading && data && !data.error && <LighthouseTab lighthouse={data} />}
+    </div>
+  );
+}
 
 function LighthouseTab({ lighthouse }: { lighthouse: any }) {
   const gaugeColor = (score: number) => score >= 90 ? "#16a34a" : score >= 50 ? "#ca8a04" : "#dc2626";

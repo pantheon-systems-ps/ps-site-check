@@ -43,26 +43,32 @@
 
 /* ── Base ────────────────────────────────────────── */
 
+html, body {
+  height: 100%;
+}
+
 body {
   color: var(--color-text);
   background: var(--color-surface);
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
 }
 
-/* Sticky footer */
-.pds-global-wrapper {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+/* Sticky footer — target the PDS wrapper (first child of body) */
+body > div:first-child,
+body > .pds-global-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100vh !important;
 }
 
-.pds-global-wrapper > main {
-  flex: 1;
+body > div:first-child > main,
+body > .pds-global-wrapper > main {
+  flex: 1 !important;
 }
 
-.pds-site-footer {
-  margin-top: auto;
+body > div:first-child > footer,
+body > div:first-child > .pds-site-footer {
+  margin-top: auto !important;
 }
 
 /* ── PDS Overrides ───────────────────────────────── */

@@ -33,13 +33,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <GlobalWrapper>
-          <AppNavbar />
-          <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "1.5rem" }}>
-            {children}
-          </main>
-          <SiteFooter containerWidth="full" />
-        </GlobalWrapper>
+        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+          <GlobalWrapper>
+            <AppNavbar />
+            <main style={{ maxWidth: "1200px", margin: "0 auto", padding: "1.5rem", flex: 1 }}>
+              {children}
+            </main>
+            <SiteFooter containerWidth="full" />
+          </GlobalWrapper>
+        </div>
         <ScrollRestoration />
         <Scripts />
       </body>
