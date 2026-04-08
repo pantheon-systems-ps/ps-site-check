@@ -391,6 +391,35 @@ export default function Check({ loaderData }: Route.ComponentProps) {
       )}
 
       {result && !isChecking && <CheckResults result={result} options={options} />}
+
+      {/* Welcome message when no check has been run */}
+      {!result && !isChecking && !error && (
+        <div style={{ textAlign: "center", padding: "2rem 1rem", color: "var(--color-text-secondary)" }}>
+          <h3 style={{ fontWeight: 600, fontSize: "1.1rem", marginBottom: "0.5rem", color: "var(--color-text)" }}>
+            Comprehensive Site Analysis
+          </h3>
+          <p style={{ fontSize: "0.85rem", maxWidth: "600px", margin: "0 auto 1.5rem", lineHeight: 1.6 }}>
+            Enter a domain above to run a full check. We'll analyze DNS, HTTP headers, TLS certificates, security headers,
+            SEO, performance (Lighthouse), email authentication, and Pantheon platform detection — all at once.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.75rem", maxWidth: "700px", margin: "0 auto", textAlign: "left" }}>
+            {[
+              { icon: "\u{1F50D}", title: "DNS & Infrastructure", desc: "A/AAAA/CNAME records, multi-resolver comparison, CAA, DNSSEC" },
+              { icon: "\u{1F512}", title: "Security & TLS", desc: "Security headers scorecard, certificate analysis, cookie audit" },
+              { icon: "\u{1F680}", title: "Performance", desc: "Lighthouse scores, filmstrip, waterfall, Web Vitals (mobile + desktop)" },
+              { icon: "\u{1F4CA}", title: "SEO & Content", desc: "Meta tags, headings, images, sitemap, structured data, mixed content" },
+              { icon: "\u{2709}", title: "Email Auth", desc: "SPF, DKIM, DMARC validation and grading" },
+              { icon: "\u{1F916}", title: "AI Analysis", desc: "AI-powered insights and prioritized action items" },
+            ].map((item, i) => (
+              <div key={i} style={{ padding: "0.75rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg)" }}>
+                <div style={{ fontSize: "1.2rem", marginBottom: "0.25rem" }}>{item.icon}</div>
+                <div style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--color-text)", marginBottom: "0.2rem" }}>{item.title}</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", lineHeight: 1.4 }}>{item.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }
