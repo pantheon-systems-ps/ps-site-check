@@ -584,7 +584,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
           </div>
 
           <p className="landing-footer">
-            Free and open to everyone. Powered by Pantheon.
+            Open to everyone. Powered by Pantheon.
           </p>
         </div>
       )}

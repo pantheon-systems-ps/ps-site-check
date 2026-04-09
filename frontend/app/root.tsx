@@ -17,8 +17,8 @@ import "./app.css";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "Site Check — Free Website Audit" },
-    { name: "description", content: "Free comprehensive website audit — DNS, security, TLS, SEO, performance, and AI-powered insights. Powered by Pantheon." },
+    { title: "Site Check — Website Audit" },
+    { name: "description", content: "Comprehensive website audit — DNS, security, TLS, SEO, performance, and AI-powered insights. Powered by Pantheon." },
   ];
 };
 
