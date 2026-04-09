@@ -47,10 +47,7 @@ export default function AppNavbar() {
           }}
         >
           <LogoIcon />
-          <span>
-            <span style={{ fontWeight: 400, color: "var(--color-text-secondary)" }}>Pantheon</span>{" "}
-            Site Check
-          </span>
+          Site Check
         </Link>
         {navLink("/", "Check")}
         {navLink("/batch", "Batch")}
