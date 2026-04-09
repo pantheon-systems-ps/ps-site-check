@@ -136,14 +136,14 @@ html body > div:first-child > .pds-site-footer {
   margin-top: auto;
 }
 
-/* Full-width navbar and wrapper */
+/* Full-width navbar and wrapper — !important needed to override PDS scoped styles */
 html .pds-navbar__container {
-  max-width: none;
+  max-width: none !important;
 }
 
 html .pds-global-wrapper,
 html .pds-global-wrapper > * {
-  max-width: none;
+  max-width: none !important;
 }
 
 /* Form inputs — ensure visible borders */
