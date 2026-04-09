@@ -679,9 +679,6 @@ type AIAnalysis = {
 
 const AI_MODELS = [
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", cost: "~$0.001" },
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", cost: "~$0.014" },
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", cost: "~$0.024" },
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6", cost: "~$0.12" },
 ];
 
 function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult; seo?: any; lighthouse?: any }) {
@@ -735,28 +732,13 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
 
   if (!analysis && !loading) {
     return (
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-        padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid #e5e7eb", background: "#fff",
-      }}>
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          style={{
-            padding: "0.35rem 0.4rem", borderRadius: "4px", border: "1px solid #ddd",
-            fontSize: "0.75rem", color: "#555", background: "#f9fafb", maxWidth: "160px",
-          }}
-        >
-          {AI_MODELS.map(m => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
+      <div style={{ textAlign: "center", padding: "0.5rem 0.75rem", borderRadius: "8px", border: "1px solid var(--color-border)", background: "var(--color-bg)" }}>
         <button
           onClick={handleAnalyze}
           style={{
             display: "inline-flex", alignItems: "center", gap: "0.4rem",
             padding: "0.4rem 1rem", borderRadius: "6px", border: "none",
-            background: "#4f46e5", color: "#fff",
+            background: "var(--color-primary)", color: "#fff",
             cursor: "pointer", fontSize: "0.8rem", fontWeight: 600,
           }}
         >
@@ -856,23 +838,13 @@ function AIAnalysisPanel({ result, seo, lighthouse }: { result: SiteCheckResult;
       )}
 
       {/* Re-analyze with different model */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: "1px solid #e8e8f0" }}>
-        <span style={{ fontSize: "0.75rem", color: "#999" }}>Re-analyze:</span>
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          style={{ padding: "0.2rem 0.4rem", borderRadius: "3px", border: "1px solid #ddd", fontSize: "0.75rem", color: "#555" }}
-        >
-          {AI_MODELS.map(m => (
-            <option key={m.id} value={m.id}>{m.name}</option>
-          ))}
-        </select>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: "1px solid #e8e8f0" }}>
         <button
           onClick={handleAnalyze}
           disabled={loading}
           style={{
             padding: "0.2rem 0.6rem", borderRadius: "4px", border: "none",
-            background: "#4f46e5", color: "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
+            background: "var(--color-primary)", color: "#fff", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600,
           }}
         >
           {loading ? "..." : "Re-analyze"}
