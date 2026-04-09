@@ -85,6 +85,24 @@ func checkHTTP(url, hostname string, opts Options) *HTTPResult {
 		return &HTTPResult{Error: "failed to create request: " + err.Error()}
 	}
 
+	// Apply forwarded query params
+	if len(opts.TargetQuery) > 0 {
+		q := req.URL.Query()
+		for key, values := range opts.TargetQuery {
+			for _, v := range values {
+				q.Add(key, v)
+			}
+		}
+		req.URL.RawQuery = q.Encode()
+	}
+
+	// Apply forwarded headers
+	for name, values := range opts.TargetHeaders {
+		for _, v := range values {
+			req.Header.Add(name, v)
+		}
+	}
+
 	// Conditional debug headers
 	if opts.PantheonDebug {
 		req.Header.Set("Pantheon-Debug", "1")
@@ -361,6 +379,24 @@ func traceRedirects(startURL, hostname string, opts Options) []RedirectHop {
 		if err != nil {
 			break
 		}
+		// Apply forwarded query params
+		if len(opts.TargetQuery) > 0 {
+			q := req.URL.Query()
+			for key, values := range opts.TargetQuery {
+				for _, v := range values {
+					q.Add(key, v)
+				}
+			}
+			req.URL.RawQuery = q.Encode()
+		}
+
+		// Apply forwarded headers
+		for name, values := range opts.TargetHeaders {
+			for _, v := range values {
+				req.Header.Add(name, v)
+			}
+		}
+
 		if opts.PantheonDebug {
 			req.Header.Set("Pantheon-Debug", "1")
 		}

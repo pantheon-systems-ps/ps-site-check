@@ -1,6 +1,10 @@
 package checker
 
-import "time"
+import (
+	"net/http"
+	"net/url"
+	"time"
+)
 
 // Options configures the check behavior.
 type Options struct {
@@ -11,7 +15,9 @@ type Options struct {
 	FastlyDebug     bool   // Send Fastly-Debug: 1 header
 	ClientIP        string // Spoof Fastly-Client-IP header for geo-routing tests
 	UserAgent       string // Custom User-Agent string (empty = default "ps-site-check/1.0")
-	WarmupRequests  int    // Number of requests for cache warmup test (0 = disabled)
+	WarmupRequests  int          // Number of requests for cache warmup test (0 = disabled)
+	TargetQuery     url.Values   `json:"-"` // Query params to forward to target
+	TargetHeaders   http.Header  `json:"-"` // Headers to forward to target
 }
 
 // Result is the top-level response from a site check.

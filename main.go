@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,6 +95,7 @@ func main() {
 	mux.HandleFunc("GET /agcdn-probe", withMiddleware(handleAGCDNProbe))
 	mux.HandleFunc("GET /bot-protection", withMiddleware(handleBotProtection))
 	mux.HandleFunc("GET /resources", withMiddleware(handleResources))
+	mux.HandleFunc("GET /v1/check", withMiddleware(handleCheckV1))
 	mux.HandleFunc("GET /result/{id}", handleResult)
 	mux.HandleFunc("GET /analytics", handleAnalytics)
 	mux.HandleFunc("GET /health", handleHealth)
@@ -213,6 +216,110 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 		ClientIP:        q.Get("client_ip"),
 		UserAgent:       q.Get("user_agent"),
 		WarmupRequests:  warmup,
+	}
+
+	result := checker.Run(rawURL, opts)
+	cacheResult(result)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func handleCheckV1(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	// --- Parse sc__ prefixed control params ---
+	rawURL := q.Get("sc__url")
+	if rawURL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "missing required parameter: sc__url",
+		})
+		return
+	}
+
+	resolve := q.Get("sc__resolve")
+	if resolve != "" {
+		if errMsg := checker.ValidateResolveIP(resolve); errMsg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
+			return
+		}
+	}
+
+	// Debug headers: default to true when neither is specified
+	pantheonDebug, fastlyDebug := true, true
+	if q.Has("sc__debug") || q.Has("sc__fdebug") {
+		pantheonDebug = q.Get("sc__debug") == "true"
+		fastlyDebug = q.Get("sc__fdebug") == "true"
+	}
+
+	warmup := 0
+	if w := q.Get("sc__warmup"); w != "" {
+		if n, err := strconv.Atoi(w); err == nil && n >= 2 && n <= 20 {
+			warmup = n
+		}
+	}
+
+	// --- Collect non-sc__ query params as TargetQuery ---
+	targetQuery := url.Values{}
+	for key, values := range q {
+		if strings.HasPrefix(key, "sco__") {
+			// Strip sco__ prefix — escape hatch for reserved name collisions
+			stripped := strings.TrimPrefix(key, "sco__")
+			for _, v := range values {
+				targetQuery.Add(stripped, v)
+			}
+		} else if !strings.HasPrefix(key, "sc__") {
+			// Forward non-control params as-is
+			for _, v := range values {
+				targetQuery.Add(key, v)
+			}
+		}
+	}
+
+	// --- Collect non-reserved request headers as TargetHeaders ---
+	reservedHeaders := map[string]bool{
+		"Host":            true,
+		"X-Api-Key":       true,
+		"Sc-Api-Key":      true,
+		"Connection":      true,
+		"Content-Length":   true,
+		"Accept-Encoding": true,
+	}
+
+	targetHeaders := http.Header{}
+	for name, values := range r.Header {
+		canonical := http.CanonicalHeaderKey(name)
+
+		// Skip reserved headers
+		if reservedHeaders[canonical] {
+			continue
+		}
+
+		if strings.HasPrefix(canonical, "Sco-") {
+			// Strip Sco- prefix — escape hatch for reserved header collisions
+			stripped := strings.TrimPrefix(canonical, "Sco-")
+			for _, v := range values {
+				targetHeaders.Add(stripped, v)
+			}
+		} else if strings.HasPrefix(canonical, "Sc-") {
+			// Sc- prefixed headers are API control — skip
+			continue
+		} else {
+			for _, v := range values {
+				targetHeaders.Add(canonical, v)
+			}
+		}
+	}
+
+	opts := checker.Options{
+		DoubleRequest:   q.Get("sc__double") == "true",
+		FollowRedirects: q.Get("sc__follow") == "true",
+		ResolveIP:       resolve,
+		PantheonDebug:   pantheonDebug,
+		FastlyDebug:     fastlyDebug,
+		ClientIP:        q.Get("sc__client_ip"),
+		UserAgent:       q.Get("sc__user_agent"),
+		WarmupRequests:  warmup,
+		TargetQuery:     targetQuery,
+		TargetHeaders:   targetHeaders,
 	}
 
 	result := checker.Run(rawURL, opts)
