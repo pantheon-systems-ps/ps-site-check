@@ -352,7 +352,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
       <Panel className="pds-spacing-mar-block-end-l">
         <Form method="get" ref={formRef}>
           {/* ── Tier 1: Primary — URL + Browser + Check ── */}
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-start", flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: "250px" }}>
               <label htmlFor="url-input" style={{ display: "block", fontWeight: 600, marginBottom: "0.25rem" }}>
                 Domain or URL
@@ -388,7 +388,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 </div>
               )}
             </div>
-            <div style={{ minWidth: "160px" }}>
+            <div style={{ minWidth: "160px", flexShrink: 0 }}>
               <label htmlFor="browser-select" style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }} title="Simulate a request from this browser — sets the User-Agent header">
                 Test as
               </label>
