@@ -85,19 +85,30 @@ const RESOLVE_TARGETS = [
   { value: "23.185.0.254", label: "FE254 (Canary)", ip: "23.185.0.254" },
 ] as const;
 
-const BROWSER_USER_AGENTS = [
-  { value: "", label: "Default (ps-site-check)" },
-  { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", label: "Chrome (Windows)" },
-  { value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", label: "Chrome (macOS)" },
-  { value: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", label: "Chrome (Android)" },
-  { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0", label: "Firefox (Windows)" },
-  { value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0", label: "Firefox (macOS)" },
-  { value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15", label: "Safari (macOS)" },
-  { value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1", label: "Safari (iPhone)" },
-  { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0", label: "Edge (Windows)" },
-  { value: "Googlebot/2.1 (+http://www.google.com/bot.html)", label: "Googlebot" },
-  { value: "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", label: "Bingbot" },
-] as const;
+const BROWSER_PRESETS = [
+  { value: "chrome-win", ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", label: "Chrome (Windows)" },
+  { value: "chrome-mac", ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", label: "Chrome (macOS)" },
+  { value: "chrome-android", ua: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", label: "Chrome (Android)" },
+  { value: "firefox-win", ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0", label: "Firefox (Windows)" },
+  { value: "firefox-mac", ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0", label: "Firefox (macOS)" },
+  { value: "safari-mac", ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15", label: "Safari (macOS)" },
+  { value: "safari-iphone", ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1", label: "Safari (iPhone)" },
+  { value: "edge-win", ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0", label: "Edge (Windows)" },
+  { value: "googlebot", ua: "Googlebot/2.1 (+http://www.google.com/bot.html)", label: "Googlebot" },
+  { value: "bingbot", ua: "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)", label: "Bingbot" },
+  { value: "default", ua: "", label: "Default (ps-site-check)" },
+];
+
+/** Detect the user's browser and return a matching preset value */
+function detectBrowser(): string {
+  if (typeof navigator === "undefined") return "chrome-mac";
+  const ua = navigator.userAgent;
+  if (/Edg\//.test(ua)) return "edge-win";
+  if (/Firefox\//.test(ua)) return /Mac/.test(ua) ? "firefox-mac" : "firefox-win";
+  if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) return /iPhone/.test(ua) ? "safari-iphone" : "safari-mac";
+  if (/Chrome\//.test(ua)) return /Android/.test(ua) ? "chrome-android" : /Mac/.test(ua) ? "chrome-mac" : "chrome-win";
+  return "chrome-mac";
+}
 
 // -- Detection helpers --
 
@@ -193,23 +204,55 @@ export async function loader({ request }: Route.LoaderArgs) {
   const fdebug = params.get("fdebug") === "true";
   const warmup = parseInt(params.get("warmup") || "0", 10) || 0;
   const clientIp = params.get("client_ip") || "";
-  const userAgent = params.get("user_agent") || "";
+  const browserPreset = params.get("browser") || "";
+  const userAgent = BROWSER_PRESETS.find(b => b.value === browserPreset)?.ua || params.get("user_agent") || "";
+  const customHeaders = params.get("custom_headers") || "";
 
   try {
-    const apiURL = new URL(`${SITE_CHECK_API}/check`);
-    apiURL.searchParams.set("url", url);
-    if (double) apiURL.searchParams.set("double", "true");
-    if (follow) apiURL.searchParams.set("follow", "true");
-    if (resolve) apiURL.searchParams.set("resolve", resolve);
-    if (debug) apiURL.searchParams.set("debug", "true");
-    if (fdebug) apiURL.searchParams.set("fdebug", "true");
-    if (warmup >= 2) apiURL.searchParams.set("warmup", String(warmup));
-    if (clientIp) apiURL.searchParams.set("client_ip", clientIp);
-    if (userAgent) apiURL.searchParams.set("user_agent", userAgent);
+    // Use /v1/check when custom headers are provided
+    const useV1 = !!customHeaders.trim();
+    const apiURL = new URL(`${SITE_CHECK_API}${useV1 ? "/v1/check" : "/check"}`);
+
+    if (useV1) {
+      apiURL.searchParams.set("sc__url", url);
+      if (double) apiURL.searchParams.set("sc__double", "true");
+      if (follow) apiURL.searchParams.set("sc__follow", "true");
+      if (resolve) apiURL.searchParams.set("sc__resolve", resolve);
+      if (debug) apiURL.searchParams.set("sc__debug", "true");
+      if (fdebug) apiURL.searchParams.set("sc__fdebug", "true");
+      if (warmup >= 2) apiURL.searchParams.set("sc__warmup", String(warmup));
+      if (clientIp) apiURL.searchParams.set("sc__client_ip", clientIp);
+      if (userAgent) apiURL.searchParams.set("sc__user_agent", userAgent);
+    } else {
+      apiURL.searchParams.set("url", url);
+      if (double) apiURL.searchParams.set("double", "true");
+      if (follow) apiURL.searchParams.set("follow", "true");
+      if (resolve) apiURL.searchParams.set("resolve", resolve);
+      if (debug) apiURL.searchParams.set("debug", "true");
+      if (fdebug) apiURL.searchParams.set("fdebug", "true");
+      if (warmup >= 2) apiURL.searchParams.set("warmup", String(warmup));
+      if (clientIp) apiURL.searchParams.set("client_ip", clientIp);
+      if (userAgent) apiURL.searchParams.set("user_agent", userAgent);
+    }
+
+    // Build fetch options — forward custom headers for v1
+    const fetchOpts: RequestInit = {};
+    if (useV1 && customHeaders.trim()) {
+      const headers: Record<string, string> = {};
+      for (const line of customHeaders.split("\n")) {
+        const colonIdx = line.indexOf(":");
+        if (colonIdx > 0) {
+          const name = line.slice(0, colonIdx).trim();
+          const value = line.slice(colonIdx + 1).trim();
+          if (name && value) headers[name] = value;
+        }
+      }
+      fetchOpts.headers = headers;
+    }
 
     // Server-side: only fetch the core check (fast ~300ms)
     // SEO, Lighthouse, Subdomains load client-side on demand
-    const checkResp = await fetch(apiURL.toString());
+    const checkResp = await fetch(apiURL.toString(), fetchOpts);
 
     if (!checkResp.ok) {
       return { result: null, error: `API returned ${checkResp.status}`, options: null };
@@ -302,11 +345,14 @@ export default function Check({ loaderData }: Route.ComponentProps) {
 
   const suggestion = useMemo(() => suggestDomain(urlValue), [urlValue]);
 
+  const [customHeaders, setCustomHeaders] = useState("");
+  const [showCustomHeaders, setShowCustomHeaders] = useState(false);
+
   return (
     <>
       <Panel className="pds-spacing-mar-block-end-l">
         <Form method="get" ref={formRef}>
-          {/* Primary row: URL + Resolve + Check button */}
+          {/* ── Tier 1: Primary — URL + Browser + Check ── */}
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: "250px" }}>
               <label htmlFor="url-input" style={{ display: "block", fontWeight: 600, marginBottom: "0.25rem" }}>
@@ -343,27 +389,28 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 </div>
               )}
             </div>
-            <div style={{ minWidth: "180px" }}>
-              <label htmlFor="resolve-select" style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }} title="Override DNS resolution to test against a specific server IP">
-                Resolve Target
+            <div style={{ minWidth: "160px" }}>
+              <label htmlFor="browser-select" style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }} title="Simulate a request from this browser — sets the User-Agent header">
+                Test as
               </label>
-              <select id="resolve-select" name="resolve" className="pds-input"
-                defaultValue={options?.resolve || ""} style={{ width: "100%", padding: "0.5rem 0.75rem" }}>
-                {RESOLVE_TARGETS.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}{t.ip ? ` (${t.ip})` : ""}</option>
+              <select id="browser-select" name="browser" className="pds-input"
+                defaultValue={options?.userAgent ? (BROWSER_PRESETS.find(b => b.ua === options.userAgent)?.value || "default") : detectBrowser()}
+                style={{ width: "100%", padding: "0.5rem 0.75rem" }}>
+                {BROWSER_PRESETS.map((b) => (
+                  <option key={b.value} value={b.value}>{b.label}</option>
                 ))}
               </select>
             </div>
             <Button label={isChecking ? "Checking..." : "Check"} buttonType="submit" variant="brand" disabled={isChecking} />
           </div>
 
-          {/* Quick toggles */}
+          {/* ── Tier 2: Quick toggles ── */}
           <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", marginTop: "0.75rem", fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
               <input type="checkbox" name="follow" value="true" defaultChecked /> Follow redirects
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Send a second request after 2s to verify caching behavior">
-              <input type="checkbox" name="double" value="true" /> Cache test
+              <input type="checkbox" name="double" value="true" defaultChecked /> Cache test
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Send Pantheon-Debug: 1 header to reveal platform details (site UUID, environment, PHP version)">
               <input type="checkbox" name="debug" value="true" defaultChecked={options ? options.debug : true} /> Pantheon Debug
@@ -373,36 +420,62 @@ export default function Check({ loaderData }: Route.ComponentProps) {
             </label>
           </div>
 
-          {/* Advanced options — collapsed by default */}
+          {/* ── Tier 3: Advanced options ── */}
           <details style={{ marginTop: "0.75rem" }}>
             <summary style={{ cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "var(--color-primary)" }}>
               Advanced Options
             </summary>
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap", marginTop: "0.5rem", padding: "0.75rem", background: "var(--color-surface)", borderRadius: "6px" }}>
-              <div style={{ minWidth: "100px", maxWidth: "130px" }}>
-                <label htmlFor="warmup-input" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }} title="Number of sequential requests to send before the main check — tests cache warm-up behavior">
-                  Warmup
-                </label>
-                <input id="warmup-input" name="warmup" type="number" min="0" max="20" placeholder="0"
-                  defaultValue={options?.warmup || ""} className="pds-input" style={{ width: "100%", padding: "0.4rem 0.6rem" }} />
+            <div style={{ marginTop: "0.5rem", padding: "0.75rem", background: "var(--color-surface)", borderRadius: "6px", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
+                <div style={{ minWidth: "180px" }}>
+                  <label htmlFor="resolve-select" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }} title="Override DNS resolution to test against a specific server IP">
+                    Resolve Target
+                  </label>
+                  <select id="resolve-select" name="resolve" className="pds-input"
+                    defaultValue={options?.resolve || ""} style={{ width: "100%", padding: "0.4rem 0.6rem" }}>
+                    {RESOLVE_TARGETS.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}{t.ip ? ` (${t.ip})` : ""}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ minWidth: "120px", maxWidth: "150px" }}>
+                  <label htmlFor="client-ip-input" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }} title="Override Fastly-Client-IP header for geo-routing tests">
+                    Client IP
+                  </label>
+                  <input id="client-ip-input" name="client_ip" type="text" placeholder="203.0.113.1"
+                    defaultValue={options?.clientIp || ""} className="pds-input" style={{ width: "100%", padding: "0.4rem 0.6rem" }} />
+                </div>
+                <div style={{ minWidth: "80px", maxWidth: "100px" }}>
+                  <label htmlFor="warmup-input" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }} title="Number of sequential requests to send before the main check — tests cache warm-up behavior">
+                    Warmup
+                  </label>
+                  <input id="warmup-input" name="warmup" type="number" min="0" max="20" placeholder="0"
+                    defaultValue={options?.warmup || ""} className="pds-input" style={{ width: "100%", padding: "0.4rem 0.6rem" }} />
+                </div>
               </div>
-              <div style={{ minWidth: "140px", maxWidth: "180px" }}>
-                <label htmlFor="client-ip-input" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }}>
-                  Client IP
+
+              {/* Custom Headers */}
+              <div>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
+                  <input type="checkbox" checked={showCustomHeaders} onChange={(e) => setShowCustomHeaders(e.target.checked)} style={{ minHeight: "auto", minWidth: "auto" }} />
+                  Custom Headers
                 </label>
-                <input id="client-ip-input" name="client_ip" type="text" placeholder="203.0.113.1"
-                  defaultValue={options?.clientIp || ""} className="pds-input" style={{ width: "100%", padding: "0.4rem 0.6rem" }} />
-              </div>
-              <div style={{ minWidth: "160px", maxWidth: "200px" }}>
-                <label htmlFor="user-agent-select" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }}>
-                  User-Agent
-                </label>
-                <select id="user-agent-select" name="user_agent" className="pds-input"
-                  defaultValue={options?.userAgent || ""} style={{ width: "100%", padding: "0.4rem 0.6rem" }}>
-                  {BROWSER_USER_AGENTS.map((b) => (
-                    <option key={b.label} value={b.value}>{b.label}</option>
-                  ))}
-                </select>
+                {showCustomHeaders && (
+                  <div style={{ marginTop: "0.4rem" }}>
+                    <textarea
+                      name="custom_headers"
+                      rows={3}
+                      placeholder={"Cookie: session=abc123\nAuthorization: Bearer token\nAccept-Language: es-MX"}
+                      value={customHeaders}
+                      onChange={(e) => setCustomHeaders(e.target.value)}
+                      className="pds-input"
+                      style={{ width: "100%", padding: "0.4rem 0.6rem", fontFamily: "monospace", fontSize: "0.8rem", resize: "vertical" }}
+                    />
+                    <p style={{ fontSize: "0.65rem", color: "var(--color-text-faint)", marginTop: "0.2rem" }}>
+                      One header per line (Name: value). These are sent directly to the target site via the /v1/check API.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </details>
