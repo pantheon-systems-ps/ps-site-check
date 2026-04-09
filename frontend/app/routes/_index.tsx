@@ -420,6 +420,9 @@ export default function Check({ loaderData }: Route.ComponentProps) {
           </div>
           <p style={{ fontWeight: 600 }}>{CHECK_STEPS[checkStep]}</p>
           <p style={{ fontSize: "0.75rem", color: "var(--color-text-faint)", marginTop: "0.25rem" }}>Usually takes 3–5 seconds</p>
+          <Link to="/" style={{ display: "inline-block", marginTop: "0.75rem", fontSize: "0.8rem", color: "var(--color-text-muted)", textDecoration: "none", padding: "0.3rem 0.75rem", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)" }}>
+            Cancel
+          </Link>
         </div>
       )}
 
@@ -437,10 +440,37 @@ export default function Check({ loaderData }: Route.ComponentProps) {
       {/* Landing page when no check has been run */}
       {!result && !isChecking && !error && (
         <div className="landing">
-          <h2>How healthy is your website?</h2>
-          <p>
-            Get a comprehensive audit in seconds — DNS, security headers, TLS, SEO, performance, and email authentication analyzed in one check.
-          </p>
+          {/* Hero with illustration */}
+          <div className="landing-hero">
+            <div className="landing-hero__text">
+              <h2>How healthy is your website?</h2>
+              <p>
+                Get a comprehensive audit in seconds — DNS, security headers, TLS, SEO, performance, and email authentication analyzed in one check.
+              </p>
+            </div>
+            <div className="landing-hero__illustration" aria-hidden="true">
+              <svg viewBox="0 0 200 160" width="200" height="160" fill="none">
+                {/* Stylized health monitor — pulse line through connected nodes */}
+                <circle cx="30" cy="80" r="8" stroke="var(--color-primary)" strokeWidth="2" fill="var(--color-primary-light)"/>
+                <circle cx="80" cy="50" r="6" stroke="var(--color-success)" strokeWidth="2" fill="var(--color-success-light)"/>
+                <circle cx="130" cy="90" r="10" stroke="var(--color-primary)" strokeWidth="2" fill="var(--color-primary-light)"/>
+                <circle cx="170" cy="60" r="7" stroke="var(--color-success)" strokeWidth="2" fill="var(--color-success-light)"/>
+                {/* Connecting pulse line */}
+                <polyline points="30,80 55,65 80,50 105,70 130,90 150,75 170,60" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.6"/>
+                {/* Secondary pulse echo */}
+                <polyline points="30,80 55,65 80,50 105,70 130,90 150,75 170,60" stroke="var(--color-primary)" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" opacity="0.2" strokeDasharray="4 4"/>
+                {/* Small detail nodes */}
+                <circle cx="55" cy="65" r="3" fill="var(--color-primary)" opacity="0.4"/>
+                <circle cx="105" cy="70" r="3" fill="var(--color-primary)" opacity="0.4"/>
+                <circle cx="150" cy="75" r="3" fill="var(--color-primary)" opacity="0.4"/>
+                {/* Decorative arcs */}
+                <path d="M20 120 Q60 100 100 110 Q140 120 180 105" stroke="var(--color-border)" strokeWidth="1.5" opacity="0.5"/>
+                <path d="M25 135 Q65 120 105 128 Q145 136 180 125" stroke="var(--color-border)" strokeWidth="1" opacity="0.3"/>
+                {/* Checkmark on largest node */}
+                <polyline points="125,88 129,93 136,85" stroke="var(--color-success)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          </div>
 
           <div className="landing-features">
             {[
@@ -592,6 +622,17 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
         ))}
       </div>
 
+      {/* ── Score help ── */}
+      <details style={{ fontSize: "0.7rem", color: "var(--color-text-faint)", padding: "0 0.25rem" }}>
+        <summary style={{ cursor: "pointer" }}>What do these scores mean?</summary>
+        <p style={{ marginTop: "0.35rem", lineHeight: 1.5 }}>
+          <strong>HTTP</strong> shows the response status code (200 = OK). <strong>Security</strong> grades A–F based on headers like HSTS, CSP, and X-Frame-Options.{" "}
+          <strong>SEO</strong> scores 0–100 based on meta tags, headings, sitemap, and content quality.{" "}
+          <strong>Performance</strong> is your Lighthouse score (mobile). <strong>Email</strong> grades SPF, DKIM, and DMARC configuration.{" "}
+          <strong>Pantheon</strong> detects whether the site runs on the Pantheon platform. Click any card to jump to its detailed section.
+        </p>
+      </details>
+
       {/* ── Context line ── */}
       <div className="context-line">
         <span>
@@ -607,10 +648,20 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
       {/* ── Insights ── */}
       {result.insights.length > 0 && (
         <div className="section-card" style={{ padding: "0.75rem 1rem" }}>
-          <h4 style={{ margin: "0 0 0.5rem", fontSize: "0.82rem", color: "var(--color-text)", fontWeight: 600 }}>
-            Insights
-            <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: "0.35rem" }}>({result.insights.length})</span>
-          </h4>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
+            <h4 style={{ margin: 0, fontSize: "0.82rem", color: "var(--color-text)", fontWeight: 600 }}>
+              Insights
+              <span style={{ fontWeight: 400, color: "var(--color-text-muted)", marginLeft: "0.35rem" }}>({result.insights.length})</span>
+            </h4>
+            <details style={{ fontSize: "0.65rem", color: "var(--color-text-faint)" }}>
+              <summary style={{ cursor: "pointer" }}>What do these mean?</summary>
+              <p style={{ marginTop: "0.25rem", lineHeight: 1.5, maxWidth: "400px", textAlign: "right" }}>
+                <strong style={{ color: "var(--color-danger)" }}>Critical</strong> issues may break functionality or expose security risks.{" "}
+                <strong style={{ color: "var(--color-warning)" }}>Warnings</strong> are recommended improvements.{" "}
+                <strong style={{ color: "var(--color-info)" }}>Info</strong> items are observations — no action needed.
+              </p>
+            </details>
+          </div>
           {errors.length > 0 && (
             <div style={{ marginBottom: "0.5rem" }}>
               <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", color: "var(--color-danger)", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>
