@@ -463,8 +463,7 @@ button,
 /* ── Landing ────────────────────────────────────── */
 
 .landing {
-  max-width: 640px;
-  margin: 0 auto;
+  max-width: none;
   padding: 1.5rem 0;
 }
 
