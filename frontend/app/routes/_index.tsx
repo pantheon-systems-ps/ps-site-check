@@ -617,6 +617,7 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
   const [lhDesktop, setLhDesktop] = useState<any>(null);
   const [lhMobileLoading, setLhMobileLoading] = useState(true);
   const [lhDesktopLoading, setLhDesktopLoading] = useState(true);
+  const [crux, setCrux] = useState<any>(null);
   const [subdomains, setSubdomains] = useState<SubdomainResult | null>(null);
   const [subLoading, setSubLoading] = useState(false);
 
@@ -639,6 +640,12 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
       .then(r => r.ok ? r.json() : null)
       .then(data => { setSeo(data); setSeoLoading(false); })
       .catch(() => setSeoLoading(false));
+
+    // CrUX real-user field data
+    fetch(`${CLIENT_API}/crux?origin=${encodeURIComponent("https://" + domain)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data && !data.error) setCrux(data); })
+      .catch(() => {});
 
     // Lighthouse — run mobile + desktop in parallel
     fetch(`${lhUrl}&strategy=mobile`)
@@ -778,7 +785,7 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
         score={lighthouse?.performance != null ? { value: lighthouse.performance, color: scoreColor(lighthouse.performance) } : undefined}
         summary={lighthouse ? `FCP ${lighthouse.fcp || "\u2014"} \u00b7 LCP ${lighthouse.lcp || "\u2014"} \u00b7 ${lighthouse.total_requests || 0} requests` : undefined}
         loading={lhMobileLoading && lhDesktopLoading} loadingMessage="Running Lighthouse audits (mobile + desktop)...">
-        <LighthouseStrategyTabs mobile={lhMobile} desktop={lhDesktop} mobileLoading={lhMobileLoading} desktopLoading={lhDesktopLoading} />
+        <LighthouseStrategyTabs mobile={lhMobile} desktop={lhDesktop} mobileLoading={lhMobileLoading} desktopLoading={lhDesktopLoading} crux={crux} />
       </SectionCard>
 
       <SectionCard id="sec-seo" title="SEO"

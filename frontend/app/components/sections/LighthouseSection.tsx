@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Panel, Callout } from "@pantheon-systems/pds-toolkit-react";
 import Badge from "~/components/ui/Badge";
 
-export function LighthouseStrategyTabs({ mobile, desktop, mobileLoading, desktopLoading }: { mobile: any; desktop: any; mobileLoading: boolean; desktopLoading: boolean }) {
+export function LighthouseStrategyTabs({ mobile, desktop, mobileLoading, desktopLoading, crux }: { mobile: any; desktop: any; mobileLoading: boolean; desktopLoading: boolean; crux?: any }) {
   const [active, setActive] = useState<"mobile" | "desktop">("mobile");
   const data = active === "mobile" ? mobile : desktop;
   const isLoading = active === "mobile" ? mobileLoading : desktopLoading;
@@ -55,12 +55,235 @@ export function LighthouseStrategyTabs({ mobile, desktop, mobileLoading, desktop
         <Callout type="warning" title="Lighthouse Unavailable"><p>{data.error}</p></Callout>
       )}
 
-      {!isLoading && data && !data.error && <LighthouseTab lighthouse={data} />}
+      {!isLoading && data && !data.error && <LighthouseTab lighthouse={data} crux={crux} />}
     </div>
   );
 }
 
-function LighthouseTab({ lighthouse }: { lighthouse: any }) {
+// -- Helpers for CrUX --
+
+function formatCruxValue(value: number, unit: string): string {
+  if (unit === "ms" || unit === "millisecond") {
+    if (value >= 1000) return `${(value / 1000).toFixed(2)}`;
+    return `${(value / 1000).toFixed(2)}`;
+  }
+  return value.toFixed(2);
+}
+
+function formatCruxUnit(value: number, unit: string): string {
+  if (unit === "ms" || unit === "millisecond") return "s";
+  return "";
+}
+
+function ratingLabel(rating: string): string {
+  if (rating === "good") return "Good";
+  if (rating === "needs-improvement") return "Needs Improvement";
+  if (rating === "poor") return "Poor";
+  return rating;
+}
+
+function ratingColor(rating: string): string {
+  if (rating === "good") return "var(--color-success)";
+  if (rating === "needs-improvement") return "var(--color-warning)";
+  if (rating === "poor") return "var(--color-danger)";
+  return "var(--color-text-muted)";
+}
+
+// -- WPT-style Real-World Usage Metrics --
+
+function CrUXFieldMetrics({ crux }: { crux: any }) {
+  const metrics = [
+    { label: "First Contentful Paint", metric: crux.fcp },
+    { label: "Largest Contentful Paint", metric: crux.lcp },
+    { label: "Cumulative Layout Shift", metric: crux.cls },
+    { label: "Time To First Byte", metric: crux.ttfb },
+    { label: "Interaction to Next Paint", metric: crux.inp },
+  ].filter(m => m.metric);
+
+  if (metrics.length === 0) return null;
+
+  return (
+    <Panel>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+        <h4 style={{ margin: 0 }}>Real-World Usage Metrics</h4>
+        <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+          Chrome UX Report — 75th percentile of real visits
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem" }}>
+        {metrics.map((m) => {
+          const color = ratingColor(m.metric.rating);
+          const total = m.metric.good + m.metric.ni + m.metric.poor;
+          const goodPct = total > 0 ? (m.metric.good / total * 100) : 0;
+          const niPct = total > 0 ? (m.metric.ni / total * 100) : 0;
+          const poorPct = total > 0 ? (m.metric.poor / total * 100) : 0;
+          const isUnitless = m.metric.unit === "unitless" || m.metric.unit === "";
+          const displayValue = isUnitless
+            ? m.metric.p75.toFixed(2)
+            : (m.metric.p75 / 1000).toFixed(2);
+          const displayUnit = isUnitless ? "" : "s";
+
+          return (
+            <div key={m.label} style={{
+              padding: "0.75rem",
+              borderRadius: "8px",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg)",
+            }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary)", marginBottom: "0.35rem" }}>
+                {m.label}
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "0.25rem", marginBottom: "0.15rem" }}>
+                <span style={{ fontSize: "1.6rem", fontWeight: 700, color, lineHeight: 1.1 }}>
+                  {displayValue}
+                </span>
+                <span style={{ fontSize: "0.85rem", fontWeight: 600, color }}>{displayUnit}</span>
+                <span style={{
+                  fontSize: "0.7rem", fontWeight: 600, color,
+                  marginLeft: "0.35rem",
+                }}>
+                  {ratingLabel(m.metric.rating)}
+                </span>
+              </div>
+              <div style={{ fontSize: "0.65rem", color: "var(--color-text-muted)", marginBottom: "0.5rem" }}>
+                At 75th percentile of visits
+              </div>
+              {/* Distribution bar */}
+              <div style={{ display: "flex", height: "18px", borderRadius: "3px", overflow: "hidden", fontSize: "0.6rem", fontWeight: 600 }}>
+                {goodPct > 0 && (
+                  <div style={{
+                    width: `${goodPct}%`, backgroundColor: "var(--color-success)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#fff", minWidth: goodPct > 8 ? "auto" : "0",
+                  }}>
+                    {goodPct >= 8 && `${goodPct.toFixed(0)}%`}
+                  </div>
+                )}
+                {niPct > 0 && (
+                  <div style={{
+                    width: `${niPct}%`, backgroundColor: "var(--color-warning)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#fff", minWidth: niPct > 8 ? "auto" : "0",
+                  }}>
+                    {niPct >= 8 && `${niPct.toFixed(0)}%`}
+                  </div>
+                )}
+                {poorPct > 0 && (
+                  <div style={{
+                    width: `${poorPct}%`, backgroundColor: "var(--color-danger)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#fff", minWidth: poorPct > 8 ? "auto" : "0",
+                  }}>
+                    {poorPct >= 8 && `${poorPct.toFixed(0)}%`}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+// -- WPT-style Individual Runs table --
+
+function IndividualRunsTable({ lighthouse }: { lighthouse: any }) {
+  // Parse timing values from lighthouse strings (e.g., "1.2 s" → 1200)
+  const parseMs = (val: string | undefined): number | null => {
+    if (!val) return null;
+    const match = val.match(/([\d.]+)\s*s/i);
+    if (match) return parseFloat(match[1]) * 1000;
+    const msMatch = val.match(/([\d.]+)\s*ms/i);
+    if (msMatch) return parseFloat(msMatch[1]);
+    return null;
+  };
+
+  const fcp = parseMs(lighthouse.fcp);
+  const lcp = parseMs(lighthouse.lcp);
+  const tti = parseMs(lighthouse.tti);
+  const si = parseMs(lighthouse.speed_index);
+  const tbt = parseMs(lighthouse.tbt);
+  const pageWeight = lighthouse.page_weight || 0;
+
+  // Build timing entries — only include ones we have
+  const entries: { label: string; value: number; display: string; color: string }[] = [];
+  if (fcp != null) entries.push({ label: "First Contentful Paint", value: fcp, display: `${Math.round(fcp)}`, color: "#e37400" });
+  if (si != null) entries.push({ label: "Speed Index", value: si, display: `${Math.round(si)}`, color: "#c04b86" });
+  if (lcp != null) entries.push({ label: "Largest Contentful Paint", value: lcp, display: `${Math.round(lcp)}`, color: "#1a73e8" });
+  if (tti != null) entries.push({ label: "Time to Interactive", value: tti, display: `${Math.round(tti)}`, color: "#6d4cc7" });
+  if (tbt != null) entries.push({ label: "Total Blocking Time", value: tbt, display: `${Math.round(tbt)}`, color: "#d93025" });
+
+  if (entries.length === 0) return null;
+
+  const maxVal = Math.max(...entries.map(e => e.value), 1);
+
+  return (
+    <Panel>
+      <h4>Lab Run Results</h4>
+      <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "-0.25rem 0 0.75rem" }}>
+        Simulated page load via PageSpeed Insights ({lighthouse.strategy}) — values in ms
+      </p>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+          <thead>
+            <tr style={{ borderBottom: "2px solid var(--color-border)" }}>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.5rem", fontWeight: 600, fontSize: "0.75rem", color: "var(--color-text-secondary)" }}>Metric</th>
+              <th style={{ textAlign: "left", padding: "0.4rem 0.5rem", fontWeight: 600, fontSize: "0.75rem", color: "var(--color-text-secondary)", minWidth: "250px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Timing</span>
+                </div>
+              </th>
+              <th style={{ textAlign: "right", padding: "0.4rem 0.5rem", fontWeight: 600, fontSize: "0.75rem", color: "var(--color-text-secondary)", width: "60px" }}>ms</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((entry) => {
+              const barWidth = (entry.value / maxVal) * 100;
+              return (
+                <tr key={entry.label} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  <td style={{ padding: "0.5rem", fontWeight: 500, whiteSpace: "nowrap" }}>{entry.label}</td>
+                  <td style={{ padding: "0.5rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", height: "20px" }}>
+                      <div style={{
+                        width: `${Math.max(barWidth, 2)}%`,
+                        height: "14px",
+                        backgroundColor: entry.color,
+                        borderRadius: "2px",
+                        transition: "width 0.3s ease",
+                      }} />
+                    </div>
+                  </td>
+                  <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{entry.display}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {/* Page weight + requests row */}
+        {(pageWeight > 0 || lighthouse.total_requests > 0) && (
+          <div style={{ display: "flex", gap: "1.5rem", marginTop: "0.75rem", padding: "0.5rem", background: "var(--color-surface)", borderRadius: "6px", fontSize: "0.78rem" }}>
+            {pageWeight > 0 && (
+              <div>
+                <span style={{ color: "var(--color-text-muted)" }}>Total Bytes: </span>
+                <strong style={{ fontVariantNumeric: "tabular-nums" }}>{pageWeight.toLocaleString()}</strong>
+                <span style={{ color: "var(--color-text-muted)", marginLeft: "0.25rem" }}>({(pageWeight / (1024 * 1024)).toFixed(1)} MB)</span>
+              </div>
+            )}
+            {lighthouse.total_requests > 0 && (
+              <div>
+                <span style={{ color: "var(--color-text-muted)" }}>Requests: </span>
+                <strong>{lighthouse.total_requests}</strong>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+function LighthouseTab({ lighthouse, crux }: { lighthouse: any; crux?: any }) {
   const gaugeColor = (score: number) => score >= 90 ? "var(--color-success)" : score >= 50 ? "var(--color-warning)" : "var(--color-danger)";
   const assessColor = (rating: string) => rating === "Good" ? "var(--color-success)" : rating === "Not Bad" ? "var(--color-info)" : rating === "Needs Improvement" ? "var(--color-warning)" : "var(--color-danger)";
 
@@ -111,6 +334,12 @@ function LighthouseTab({ lighthouse }: { lighthouse: any }) {
           <AssessmentCard title="Is It Resilient?" assessment={lighthouse.is_resilient} />
         </div>
       )}
+
+      {/* CrUX Real-World Usage Metrics (WPT-style) */}
+      {crux && <CrUXFieldMetrics crux={crux} />}
+
+      {/* Lab Run Results (WPT-style Individual Runs) */}
+      <IndividualRunsTable lighthouse={lighthouse} />
 
       {/* Lighthouse score gauges */}
       <Panel>
