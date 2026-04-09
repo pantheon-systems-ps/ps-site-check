@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Route } from "./+types/batch";
 import { Form, useNavigation, Link } from "react-router";
 import { Panel, Button, Callout } from "@pantheon-systems/pds-toolkit-react";
@@ -62,10 +63,15 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function CheckBatch({ actionData }: Route.ComponentProps) {
+  const [urlsValue, setUrlsValue] = useState("");
   const result = actionData?.result as BatchResult | null | undefined;
   const error = actionData?.error as string | null | undefined;
   const navigation = useNavigation();
   const isChecking = navigation.state === "submitting";
+
+  const count = urlsValue.trim()
+    ? urlsValue.split("\n").filter((line) => line.trim().length > 0).length
+    : 0;
 
   return (
     <>
@@ -91,13 +97,18 @@ export default function CheckBatch({ actionData }: Route.ComponentProps) {
             required
             className="pds-input"
             style={{ width: "100%", padding: "0.5rem 0.75rem", fontFamily: "monospace", resize: "vertical" }}
+            value={urlsValue}
+            onChange={(e) => setUrlsValue(e.target.value)}
           />
+          <p style={{ fontSize: "0.75rem", color: count > 10 ? "var(--color-danger)" : "var(--color-text-muted)", marginTop: "0.25rem" }}>
+            {count}/10 domains
+          </p>
           <div style={{ marginTop: "0.75rem" }}>
             <Button
               label={isChecking ? "Checking..." : "Check All"}
               buttonType="submit"
               variant="brand"
-              disabled={isChecking}
+              disabled={isChecking || count === 0 || count > 10}
             />
           </div>
         </Form>

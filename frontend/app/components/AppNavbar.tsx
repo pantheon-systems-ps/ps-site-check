@@ -3,7 +3,7 @@ import { Navbar } from "@pantheon-systems/pds-toolkit-react";
 
 function LogoIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20" style={{ verticalAlign: "middle" }}>
+    <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="20" height="20" style={{ verticalAlign: "middle" }}>
       <circle cx="14" cy="14" r="12" fill="none" stroke="var(--color-primary)" strokeWidth="2.5"/>
       <line x1="23" y1="23" x2="30" y2="30" stroke="var(--color-primary)" strokeWidth="3" strokeLinecap="round"/>
       <polyline points="9,14 13,18 20,10" fill="none" stroke="var(--color-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>

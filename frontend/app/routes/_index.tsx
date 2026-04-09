@@ -1,5 +1,5 @@
 import type { Route } from "./+types/_index";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Form, useNavigation, Link } from "react-router";
 import { Panel, Button, Callout } from "@pantheon-systems/pds-toolkit-react";
 import SectionCard from "~/components/SectionCard";
@@ -20,6 +20,49 @@ import AGCDNProbeTab from "~/components/sections/AGCDNProbeTab";
 import BotProtectionTab from "~/components/sections/BotProtectionTab";
 import ResourceAuditTab from "~/components/sections/ResourceAuditTab";
 import ProServicesCTA from "~/components/ProServicesCTA";
+
+// -- Check history helpers --
+
+const HISTORY_KEY = "site-check-history";
+const MAX_HISTORY = 5;
+
+function getCheckHistory(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+  } catch { return []; }
+}
+
+function addToHistory(domain: string) {
+  if (typeof window === "undefined") return;
+  const history = getCheckHistory().filter(d => d !== domain);
+  history.unshift(domain);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
+}
+
+// -- Typo suggestion --
+
+const TLD_TYPOS: Record<string, string> = {
+  ".oi": ".io", ".ocm": ".com", ".con": ".com", ".rog": ".org",
+  ".nte": ".net", ".cmo": ".com", ".ogr": ".org", ".oi.": ".io",
+};
+
+function suggestDomain(domain: string): string | null {
+  for (const [typo, fix] of Object.entries(TLD_TYPOS)) {
+    if (domain.endsWith(typo)) return domain.slice(0, -typo.length) + fix;
+  }
+  return null;
+}
+
+// -- Progress steps --
+
+const CHECK_STEPS = [
+  "Resolving DNS...",
+  "Connecting to server...",
+  "Analyzing HTTP headers...",
+  "Checking TLS certificate...",
+  "Evaluating security...",
+];
 
 const SITE_CHECK_API =
   process.env.SITE_CHECK_API_URL ||
@@ -196,9 +239,16 @@ export default function Check({ loaderData }: Route.ComponentProps) {
   const { result, error, options } = loaderData;
   const navigation = useNavigation();
   const isChecking = navigation.state === "loading";
+  const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [urlValue, setUrlValue] = useState(result?.url?.replace(/^https?:\/\//, "") || "");
+  const [history, setHistory] = useState<string[]>([]);
+  const [checkStep, setCheckStep] = useState(0);
 
-  // Load reCAPTCHA v3 script dynamically (if configured on API)
+  // Load history + auto-focus + reCAPTCHA
   useEffect(() => {
+    setHistory(getCheckHistory());
+    if (!result && inputRef.current) inputRef.current.focus();
     fetch(`${CLIENT_API}/models`)
       .then(r => r.json())
       .then(data => {
@@ -215,10 +265,47 @@ export default function Check({ loaderData }: Route.ComponentProps) {
       .catch(() => {});
   }, []);
 
+  // Save to history when result loads
+  useEffect(() => {
+    if (result?.url) {
+      const domain = result.url.replace(/^https?:\/\//, "").split("/")[0];
+      addToHistory(domain);
+      setHistory(getCheckHistory());
+    }
+  }, [result?.url]);
+
+  // Progress step animation
+  useEffect(() => {
+    if (!isChecking) { setCheckStep(0); return; }
+    const interval = setInterval(() => setCheckStep(s => (s + 1) % CHECK_STEPS.length), 800);
+    return () => clearInterval(interval);
+  }, [isChecking]);
+
+  // Keyboard shortcut: Ctrl/Cmd+Enter to submit
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && formRef.current) {
+        e.preventDefault();
+        formRef.current.requestSubmit();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const urlError = useMemo(() => {
+    if (!urlValue) return null;
+    if (/\s/.test(urlValue)) return "Domain cannot contain spaces";
+    if (!/\./.test(urlValue.replace(/^https?:\/\//, ""))) return "Enter a valid domain (e.g., example.com)";
+    return null;
+  }, [urlValue]);
+
+  const suggestion = useMemo(() => suggestDomain(urlValue), [urlValue]);
+
   return (
     <>
       <Panel className="pds-spacing-mar-block-end-l">
-        <Form method="get">
+        <Form method="get" ref={formRef}>
           {/* Primary row: URL + Resolve + Check button */}
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap" }}>
             <div style={{ flex: 1, minWidth: "250px" }}>
@@ -226,15 +313,35 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 Domain or URL
               </label>
               <input
+                ref={inputRef}
                 id="url-input"
                 name="url"
                 type="text"
                 placeholder="example.com"
-                defaultValue={result?.url?.replace(/^https?:\/\//, "") || ""}
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
                 required
                 className="pds-input"
-                style={{ width: "100%", padding: "0.6rem 0.75rem", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", fontSize: "0.95rem" }}
+                aria-invalid={!!urlError}
+                aria-describedby={urlError ? "url-error" : undefined}
+                style={{ width: "100%", padding: "0.6rem 0.75rem", border: `1px solid ${urlError ? "var(--color-danger)" : "var(--color-border)"}`, borderRadius: "var(--radius-sm)", fontSize: "0.95rem" }}
               />
+              {urlError && <p id="url-error" role="alert" style={{ fontSize: "0.75rem", color: "var(--color-danger)", marginTop: "0.2rem" }}>{urlError}</p>}
+              {suggestion && !urlError && (
+                <p style={{ fontSize: "0.75rem", color: "var(--color-warning)", marginTop: "0.2rem" }}>
+                  Did you mean <button type="button" onClick={() => setUrlValue(suggestion)} style={{ color: "var(--color-primary)", background: "none", border: "none", cursor: "pointer", fontWeight: 600, textDecoration: "underline", padding: 0, fontSize: "inherit", minHeight: "auto", minWidth: "auto" }}>{suggestion}</button>?
+                </p>
+              )}
+              {!result && history.length > 0 && (
+                <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginTop: "0.35rem" }}>
+                  {history.map(d => (
+                    <button key={d} type="button" onClick={() => setUrlValue(d)}
+                      style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem", borderRadius: "var(--radius-full)", border: "1px solid var(--color-border)", background: "var(--color-bg)", color: "var(--color-text-secondary)", cursor: "pointer", minHeight: "auto", minWidth: "auto" }}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <div style={{ minWidth: "180px" }}>
               <label htmlFor="resolve-select" style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }} title="Override DNS resolution to test against a specific server IP">
@@ -303,21 +410,25 @@ export default function Check({ loaderData }: Route.ComponentProps) {
       </Panel>
 
       {isChecking && (
-        <div className="loading-center">
+        <div className="loading-center" role="status" aria-live="polite">
           <div style={{ margin: "0 auto 1rem" }}>
-            <svg viewBox="0 0 50 50" width="40" height="40">
+            <svg aria-hidden="true" viewBox="0 0 50 50" width="40" height="40">
               <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="90 60" strokeLinecap="round">
                 <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
               </circle>
             </svg>
           </div>
-          <p>Checking site...</p>
+          <p style={{ fontWeight: 600 }}>{CHECK_STEPS[checkStep]}</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--color-text-faint)", marginTop: "0.25rem" }}>Usually takes 3–5 seconds</p>
         </div>
       )}
 
       {error && (
         <Callout type="critical" title="Check failed">
           <p>{error}</p>
+          <div style={{ marginTop: "0.5rem" }}>
+            <Button label="Retry" variant="brand" onClick={() => formRef.current?.requestSubmit()} />
+          </div>
         </Callout>
       )}
 
@@ -337,7 +448,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 title: "Security & Infrastructure",
                 desc: "TLS certificates, security headers scorecard, DNS records, and Pantheon platform detection.",
                 icon: (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                   </svg>
                 ),
@@ -346,7 +457,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 title: "Performance & SEO",
                 desc: "Lighthouse scores, Core Web Vitals, meta tags, sitemap, structured data, and content analysis.",
                 icon: (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                   </svg>
                 ),
@@ -355,7 +466,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 title: "AI-Powered Insights",
                 desc: "Prioritized findings and actionable next steps generated by AI analysis of your full site report.",
                 icon: (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5v1h-4v-1C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/>
                     <path d="M10 14h4"/><path d="M10 18h4"/><path d="M11 22h2"/>
                   </svg>
@@ -443,11 +554,11 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
   const lighthouse = lhMobile || lhDesktop;
   const lhLoading = lhMobileLoading && lhDesktopLoading;
 
-  const gradeColor = (grade: string) => grade <= "B" ? "var(--color-success)" : grade <= "C" ? "var(--color-warning)" : "var(--color-danger)";
-  const scoreColor = (score: number) => score >= 80 ? "var(--color-success)" : score >= 50 ? "var(--color-warning)" : "var(--color-danger)";
-  const errors = result.insights.filter(i => i.severity === "error");
-  const warnings = result.insights.filter(i => i.severity === "warning");
-  const infos = result.insights.filter(i => i.severity === "info");
+  const gradeColor = useCallback((grade: string) => grade <= "B" ? "var(--color-success)" : grade <= "C" ? "var(--color-warning)" : "var(--color-danger)", []);
+  const scoreColor = useCallback((score: number) => score >= 80 ? "var(--color-success)" : score >= 50 ? "var(--color-warning)" : "var(--color-danger)", []);
+  const errors = useMemo(() => result.insights.filter(i => i.severity === "error"), [result.insights]);
+  const warnings = useMemo(() => result.insights.filter(i => i.severity === "warning"), [result.insights]);
+  const infos = useMemo(() => result.insights.filter(i => i.severity === "info"), [result.insights]);
   const domainHost = result.url.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
 
   return (
@@ -455,21 +566,28 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
       {/* ── Score Dashboard ── */}
       <div className="score-dashboard">
         {[
-          { label: "HTTP", target: "sec-response", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "var(--color-success)" : result.http?.status_code && result.http.status_code < 400 ? "var(--color-warning)" : "var(--color-danger)" },
-          { label: "Security", target: "sec-security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "var(--color-text-muted)" },
-          { label: "SEO", target: "sec-seo", value: seo?.score ?? (seoLoading ? "\u2026" : "\u2014"), color: seo ? scoreColor(seo.score) : "var(--color-text-muted)" },
-          { label: "Performance", target: "sec-perf", value: lighthouse?.performance ?? (lhLoading ? "\u2026" : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "var(--color-text-muted)" },
-          { label: "Email", target: "sec-email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "var(--color-text-muted)" },
-          { label: "Pantheon", target: "sec-infra", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "var(--color-primary)" : "var(--color-text-muted)" },
+          { label: "HTTP", target: "sec-response", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "var(--color-success)" : result.http?.status_code && result.http.status_code < 400 ? "var(--color-warning)" : "var(--color-danger)",
+            hint: result.http?.status_code === 200 ? "Site responding normally" : result.http?.status_code ? `Status ${result.http.status_code}` : "" },
+          { label: "Security", target: "sec-security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "var(--color-text-muted)",
+            hint: result.security ? `${result.security.headers.filter(h => h.present).length} of ${result.security.headers.length} headers present` : "" },
+          { label: "SEO", target: "sec-seo", value: seo?.score ?? (seoLoading ? "\u2026" : "\u2014"), color: seo ? scoreColor(seo.score) : "var(--color-text-muted)",
+            hint: seo ? `${seo.issues?.length || 0} issues found` : seoLoading ? "Analyzing..." : "" },
+          { label: "Performance", target: "sec-perf", value: lighthouse?.performance ?? (lhLoading ? "\u2026" : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "var(--color-text-muted)",
+            hint: lighthouse ? `LCP ${lighthouse.lcp || "\u2014"}` : lhLoading ? "Running audit..." : "" },
+          { label: "Email", target: "sec-email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "var(--color-text-muted)",
+            hint: result.email_auth ? `SPF ${result.email_auth.spf.found ? "\u2713" : "\u2717"} DMARC ${result.email_auth.dmarc.found ? "\u2713" : "\u2717"}` : "" },
+          { label: "Pantheon", target: "sec-infra", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "var(--color-primary)" : "var(--color-text-muted)",
+            hint: pantheon.isPantheon ? (pantheon.cms || "Detected") : "Not detected" },
         ].map((s, i) => (
           <button
             key={i}
             className="score-card"
             onClick={() => document.getElementById(s.target)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            aria-label={`Jump to ${s.label} section`}
+            aria-label={`${s.label}: ${s.value}${s.hint ? ` — ${s.hint}` : ""}. Click to jump to section.`}
           >
             <div className="score-card__value" style={{ color: s.color }}>{s.value}</div>
             <div className="score-card__label">{s.label}</div>
+            {s.hint && <div className="score-card__hint">{s.hint}</div>}
           </button>
         ))}
       </div>
@@ -598,16 +716,7 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
                 <p style={{ fontSize: "0.82rem", color: "var(--color-text-muted)", marginBottom: "0.75rem" }}>
                   Discover subdomains via SecurityTrails or Certificate Transparency logs.
                 </p>
-                <button
-                  onClick={discoverSubdomains}
-                  aria-label="Discover subdomains for this domain"
-                  style={{
-                    padding: "0.5rem 1rem", borderRadius: "var(--radius-sm)", border: "1px solid var(--color-border)",
-                    background: "var(--color-bg)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, color: "var(--color-primary)",
-                  }}
-                >
-                  Discover Subdomains
-                </button>
+                <Button label="Discover Subdomains" onClick={discoverSubdomains} variant="secondary" />
               </div>
             )}
           </SectionCard>
@@ -640,12 +749,12 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
             cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, color: "var(--color-primary)",
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5v1h-4v-1C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/>
             <path d="M10 14h4"/><path d="M10 18h4"/><path d="M11 22h2"/>
           </svg>
           Analyze with AI
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="18 15 12 9 6 15"/>
           </svg>
         </button>

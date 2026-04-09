@@ -41,6 +41,7 @@ export default function SectionCard({
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flex: 1, minWidth: 0 }}>
           <svg
+            aria-hidden="true"
             width="10" height="10" viewBox="0 0 10 10"
             style={{
               transform: open ? "rotate(90deg)" : "rotate(0deg)",
@@ -68,7 +69,7 @@ export default function SectionCard({
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
           {loading && (
-            <svg viewBox="0 0 50 50" width="16" height="16">
+            <svg aria-hidden="true" viewBox="0 0 50 50" width="16" height="16">
               <circle cx="25" cy="25" r="20" fill="none" stroke="var(--color-primary)" strokeWidth="5" strokeDasharray="90 60" strokeLinecap="round">
                 <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
               </circle>
@@ -84,7 +85,7 @@ export default function SectionCard({
 
       {loading && (
         <div style={{ padding: "2rem 1rem", textAlign: "center", borderTop: "1px solid var(--color-border)" }}>
-          <svg viewBox="0 0 50 50" width="24" height="24" style={{ margin: "0 auto" }}>
+          <svg aria-hidden="true" viewBox="0 0 50 50" width="24" height="24" style={{ margin: "0 auto" }}>
             <circle cx="25" cy="25" r="20" fill="none" stroke="var(--color-primary)" strokeWidth="4" strokeDasharray="90 60" strokeLinecap="round">
               <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
             </circle>
