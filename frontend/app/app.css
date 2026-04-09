@@ -8,23 +8,57 @@
 /* ── Design Tokens ───────────────────────────────── */
 
 :root {
+  /* Brand */
   --color-primary: #4f46e5;
   --color-primary-light: #eef2ff;
+  --color-purple: #7c3aed;
+
+  /* Status */
   --color-success: #16a34a;
+  --color-success-soft: #22c55e;
   --color-success-light: #f0fdf4;
-  --color-warning: #d97706;
+  --color-success-border: #bbf7d0;
+  --color-warning: #ca8a04;
+  --color-warning-strong: #ea580c;
   --color-warning-light: #fffbeb;
+  --color-warning-bg: #fefce8;
   --color-danger: #dc2626;
   --color-danger-light: #fef2f2;
+  --color-danger-border: #fecaca;
   --color-info: #2563eb;
   --color-info-light: #eff6ff;
 
+  /* Text */
   --color-text: #111827;
+  --color-text-body: #374151;
   --color-text-secondary: #4b5563;
-  --color-text-muted: #9ca3af;
+  --color-text-muted: #6b7280;
+  --color-text-faint: #9ca3af;
+
+  /* Surfaces */
   --color-border: #e5e7eb;
   --color-surface: #f9fafb;
+  --color-surface-alt: #f3f4f6;
   --color-bg: #ffffff;
+  --color-white: #ffffff;
+
+  /* AI panel */
+  --color-ai-surface: #f8f7ff;
+  --color-ai-border: #e0e0f0;
+
+  /* Lighthouse (standard Lighthouse palette) */
+  --color-lh-good: #0cce6b;
+  --color-lh-needs-improvement: #ffa400;
+  --color-lh-poor: #ff4e42;
+  --color-lh-track: #e0e0e0;
+
+  /* Resource type colors */
+  --color-res-script: #f59e0b;
+  --color-res-stylesheet: #8b5cf6;
+  --color-res-image: #10b981;
+  --color-res-font: #3b82f6;
+  --color-res-document: #ef4444;
+  --color-res-xhr: #6366f1;
 
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -53,47 +87,97 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Sticky footer — target the PDS wrapper (first child of body) */
-body > div:first-child,
-body > .pds-global-wrapper {
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 100vh !important;
+/* ── Skip Navigation ─────────────────────────────── */
+
+.skip-nav {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 1000;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: var(--color-white);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: top 0.15s;
 }
 
-body > div:first-child > main,
-body > .pds-global-wrapper > main {
-  flex: 1 !important;
+.skip-nav:focus {
+  top: 0.5rem;
 }
 
-body > div:first-child > footer,
-body > div:first-child > .pds-site-footer {
-  margin-top: auto !important;
+/* ── PDS Overrides (high-specificity selectors instead of !important) ── */
+
+/* Sticky footer — target the PDS wrapper */
+html body > div:first-child,
+html body > .pds-global-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-/* ── PDS Overrides ───────────────────────────────── */
-
-.pds-navbar__container {
-  max-width: none !important;
+html body > div:first-child > main,
+html body > .pds-global-wrapper > main {
+  flex: 1;
 }
 
-/* Force PDS GlobalWrapper to use full width */
-.pds-global-wrapper,
-.pds-global-wrapper > * {
-  max-width: none !important;
+html body > div:first-child > footer,
+html body > div:first-child > .pds-site-footer {
+  margin-top: auto;
+}
+
+/* Full-width navbar and wrapper */
+html .pds-navbar__container {
+  max-width: none;
+}
+
+html .pds-global-wrapper,
+html .pds-global-wrapper > * {
+  max-width: none;
 }
 
 /* Form inputs — ensure visible borders */
-.pds-input {
-  border: 1px solid var(--color-border) !important;
-  border-radius: var(--radius-sm) !important;
-  transition: border-color 0.15s, box-shadow 0.15s !important;
+html .pds-input {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.pds-input:focus {
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
-  outline: none !important;
+html .pds-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+  outline: none;
+}
+
+/* ── Focus & Accessibility ──────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Minimum touch target size (44px) */
+button,
+[role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Smaller inline buttons (badges, re-analyze) get padding boost */
+.btn-inline {
+  min-height: 36px;
+  padding: 0.4rem 0.75rem;
 }
 
 /* ── Score Cards ─────────────────────────────────── */
@@ -222,9 +306,9 @@ body > div:first-child > .pds-site-footer {
 /* ── AI Panel ────────────────────────────────────── */
 
 .ai-panel {
-  border: 1px solid #ddd5f5;
+  border: 1px solid var(--color-ai-border);
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #faf9ff 0%, #f5f3ff 100%);
+  background: var(--color-ai-surface);
   padding: 1rem 1.25rem;
   box-shadow: var(--shadow-sm);
 }
@@ -272,7 +356,7 @@ body > div:first-child > .pds-site-footer {
   border-radius: var(--radius-full);
   font-size: 0.7rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--color-white);
   line-height: 1.4;
 }
 
@@ -309,6 +393,26 @@ body > div:first-child > .pds-site-footer {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--color-text-secondary);
+}
+
+/* ── Responsive ──────────────────────────────────── */
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .landing-features {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Print styles ────────────────────────────────── */

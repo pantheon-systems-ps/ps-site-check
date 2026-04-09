@@ -37,6 +37,7 @@ export default function SectionCard({
         className="section-card__header"
         onClick={() => !loading && setOpen(!open)}
         aria-expanded={open}
+        aria-label={`${title} section${summary ? `: ${summary}` : ""}`}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flex: 1, minWidth: 0 }}>
           <svg

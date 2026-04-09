@@ -47,11 +47,15 @@ export default function AppNavbar() {
           }}
         >
           <LogoIcon />
-          Site Check
+          <span>
+            <span style={{ fontWeight: 400, color: "var(--color-text-secondary)" }}>Pantheon</span>{" "}
+            Site Check
+          </span>
         </Link>
         {navLink("/", "Check")}
         {navLink("/batch", "Batch")}
         {navLink("/compare", "Compare")}
+        {navLink("/har", "HAR")}
         {navLink("/migration", "Migration")}
       </div>
     </Navbar>

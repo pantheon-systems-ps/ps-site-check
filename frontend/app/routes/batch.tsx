@@ -69,10 +69,10 @@ export default function CheckBatch({ actionData }: Route.ComponentProps) {
 
   return (
     <>
-      <h2>Batch Site Check</h2>
-      <Callout type="info" title="Batch Check" className="pds-spacing-mar-block-end-l">
-        <p>Enter up to 10 domains (one per line) to check them all at once.</p>
-      </Callout>
+      <h2>Batch Check</h2>
+      <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "1rem" }}>
+        Check up to 10 domains at once. Each gets a full DNS, HTTP, and TLS analysis with a link to its detailed report.
+      </p>
 
       <Panel className="pds-spacing-mar-block-end-l">
         <Form method="post">
@@ -110,7 +110,7 @@ export default function CheckBatch({ actionData }: Route.ComponentProps) {
               <animateTransform attributeName="transform" type="rotate" dur="0.8s" from="0 25 25" to="360 25 25" repeatCount="indefinite" />
             </circle>
           </svg>
-          <p style={{ color: "#666" }}>Checking sites...</p>
+          <p style={{ color: "var(--color-text-secondary)" }}>Checking sites...</p>
         </div>
       )}
 
@@ -138,11 +138,11 @@ function BatchResults({ result }: { result: BatchResult }) {
     <div className="pds-spacing-mar-block-start-l">
       <Panel className="pds-spacing-mar-block-end-l">
         <h3>Summary</h3>
-        <p style={{ color: "#666", fontSize: "0.85rem" }}>
+        <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
           Checked <strong>{result.total_urls}</strong> URLs in{" "}
           <strong>{result.total_ms}ms</strong>
-          {errorCount > 0 && <> &middot; <span style={{ color: "#dc2626" }}>{errorCount} errors</span></>}
-          {warningCount > 0 && <> &middot; <span style={{ color: "#ca8a04" }}>{warningCount} warnings</span></>}
+          {errorCount > 0 && <> &middot; <span style={{ color: "var(--color-danger)" }}>{errorCount} errors</span></>}
+          {warningCount > 0 && <> &middot; <span style={{ color: "var(--color-warning)" }}>{warningCount} warnings</span></>}
         </p>
       </Panel>
 
@@ -180,14 +180,14 @@ function BatchResults({ result }: { result: BatchResult }) {
                     {issues.length > 0 ? (
                       <span
                         style={{
-                          color: issues.some((i) => i.severity === "error") ? "#dc2626" : "#ca8a04",
+                          color: issues.some((i) => i.severity === "error") ? "var(--color-danger)" : "var(--color-warning)",
                           fontWeight: 600,
                         }}
                       >
                         {issues.length}
                       </span>
                     ) : (
-                      <span style={{ color: "#16a34a" }}>OK</span>
+                      <span style={{ color: "var(--color-success)" }}>OK</span>
                     )}
                   </td>
                   <td>
@@ -233,8 +233,8 @@ function BatchResults({ result }: { result: BatchResult }) {
 }
 
 function StatusBadge({ code, error }: { code?: number; error?: string }) {
-  if (error) return <span style={{ color: "#dc2626", fontSize: "0.85rem" }}>ERR</span>;
+  if (error) return <span style={{ color: "var(--color-danger)", fontSize: "0.85rem" }}>ERR</span>;
   if (!code) return <span>{"\u2014"}</span>;
-  const color = code < 300 ? "#16a34a" : code < 400 ? "#ca8a04" : "#dc2626";
+  const color = code < 300 ? "var(--color-success)" : code < 400 ? "var(--color-warning)" : "var(--color-danger)";
   return <span style={{ color, fontWeight: 700 }}>{code}</span>;
 }

@@ -52,7 +52,7 @@ export default function Analytics() {
         <button
           onClick={refresh}
           style={{
-            padding: "0.35rem 0.75rem", borderRadius: "var(--radius-sm)",
+            padding: "0.5rem 0.75rem", borderRadius: "var(--radius-sm)",
             border: "1px solid var(--color-border)", background: "var(--color-bg)",
             cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, color: "var(--color-primary)",
           }}
@@ -81,7 +81,7 @@ export default function Analytics() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+      <div className="analytics-grid">
         {/* Hourly distribution */}
         <Panel>
           <h4 style={{ fontSize: "0.85rem", margin: "0 0 0.5rem" }}>Hourly Distribution (UTC)</h4>

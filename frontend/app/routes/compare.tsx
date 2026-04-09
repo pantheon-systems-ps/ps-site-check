@@ -235,13 +235,11 @@ export default function Compare({ loaderData }: Route.ComponentProps) {
 
   return (
     <>
-      <h2>Compare Two Sites</h2>
-      <Callout type="info" title="Side-by-Side Comparison" className="pds-spacing-mar-block-end-l">
-        <p>
-          <strong>Quick Compare</strong> checks DNS, HTTP, and TLS for two URLs.{" "}
-          <strong>Crawl & Compare</strong> discovers pages at configurable depth and diffs URL paths and status codes for migration validation.
-        </p>
-      </Callout>
+      <h2>Compare Sites</h2>
+      <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "1rem" }}>
+        <strong>Quick Compare</strong> checks DNS, HTTP, and TLS side by side.{" "}
+        <strong>Crawl & Compare</strong> discovers pages and diffs URLs — ideal for validating migrations.
+      </p>
 
       <Tabs ariaLabel="Comparison mode" tabs={tabs} />
     </>
@@ -289,20 +287,20 @@ function QuickComparisonResults({ resultA, resultB }: { resultA: SiteCheckResult
       {/* AI Analysis */}
       <div style={{ textAlign: "center", marginBottom: "1rem" }}>
         {!aiResult && !aiLoading && (
-          <button onClick={analyzeCompare} style={{ padding: "0.5rem 1.25rem", borderRadius: "6px", border: "1px solid #e5e7eb", background: "linear-gradient(135deg, #f0f0ff 0%, #fff 100%)", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "#4f46e5" }}>
+          <button onClick={analyzeCompare} style={{ padding: "0.5rem 1.25rem", borderRadius: "6px", border: "1px solid var(--color-border)", background: "linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-bg) 100%)", cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "var(--color-primary)" }}>
             Analyze Comparison with AI
           </button>
         )}
-        {aiLoading && <p style={{ color: "#666", fontSize: "0.85rem" }}>Analyzing with Claude Opus...</p>}
+        {aiLoading && <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>Analyzing with Claude Opus...</p>}
         {aiResult && !aiResult.error && (
-          <div style={{ textAlign: "left", padding: "1rem", background: "#f8f7ff", borderRadius: "8px", border: "1px solid #e0e0f0", marginBottom: "1rem" }}>
-            <h4 style={{ margin: "0 0 0.5rem", color: "#4f46e5", fontSize: "0.95rem" }}>AI Analysis</h4>
-            {aiResult.summary && <p style={{ fontSize: "0.9rem", color: "#333", lineHeight: 1.5 }}>{aiResult.summary}</p>}
-            {aiResult.findings?.length > 0 && <ul style={{ fontSize: "0.85rem", color: "#444", lineHeight: 1.6 }}>{aiResult.findings.map((f: string, i: number) => <li key={i}>{f}</li>)}</ul>}
+          <div style={{ textAlign: "left", padding: "1rem", background: "var(--color-ai-surface)", borderRadius: "8px", border: "1px solid var(--color-ai-border)", marginBottom: "1rem" }}>
+            <h4 style={{ margin: "0 0 0.5rem", color: "var(--color-primary)", fontSize: "0.95rem" }}>AI Analysis</h4>
+            {aiResult.summary && <p style={{ fontSize: "0.9rem", color: "var(--color-text)", lineHeight: 1.5 }}>{aiResult.summary}</p>}
+            {aiResult.findings?.length > 0 && <ul style={{ fontSize: "0.85rem", color: "var(--color-text-body)", lineHeight: 1.6 }}>{aiResult.findings.map((f: string, i: number) => <li key={i}>{f}</li>)}</ul>}
             {aiResult.next_steps?.length > 0 && (
               <>
-                <h5 style={{ fontSize: "0.8rem", color: "#888", textTransform: "uppercase", margin: "0.5rem 0 0.25rem" }}>Next Steps</h5>
-                <ol style={{ fontSize: "0.85rem", color: "#444", lineHeight: 1.6 }}>{aiResult.next_steps.map((s: string, i: number) => <li key={i}>{s}</li>)}</ol>
+                <h5 style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", textTransform: "uppercase", margin: "0.5rem 0 0.25rem" }}>Next Steps</h5>
+                <ol style={{ fontSize: "0.85rem", color: "var(--color-text-body)", lineHeight: 1.6 }}>{aiResult.next_steps.map((s: string, i: number) => <li key={i}>{s}</li>)}</ol>
               </>
             )}
           </div>
@@ -313,7 +311,7 @@ function QuickComparisonResults({ resultA, resultB }: { resultA: SiteCheckResult
       {/* Comparison table */}
       <Panel className="pds-spacing-mar-block-end-l">
         <h3>Comparison</h3>
-        <p style={{ color: "#666", fontSize: "0.85rem" }}>
+        <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
           <strong>A:</strong> {resultA.url} ({resultA.duration_ms}ms) {" \u00B7 "} <strong>B:</strong> {resultB.url} ({resultB.duration_ms}ms)
         </p>
         <table className="pds-table">
@@ -321,7 +319,7 @@ function QuickComparisonResults({ resultA, resultB }: { resultA: SiteCheckResult
           <tbody>
             {rows.map((row, i) => {
               const match = row.valueA === row.valueB;
-              const cellStyle = { fontSize: "0.85rem", wordBreak: "break-all" as const, backgroundColor: match ? "#f0fdf4" : "#fefce8" };
+              const cellStyle = { fontSize: "0.85rem", wordBreak: "break-all" as const, backgroundColor: match ? "var(--color-success-light)" : "var(--color-warning-bg)" };
               const isStatus = row.label === "HTTP Status";
               return (
                 <tr key={i}>
@@ -351,7 +349,7 @@ function QuickComparisonResults({ resultA, resultB }: { resultA: SiteCheckResult
 
 function CrawlComparisonResults({ result }: { result: CompareResult }) {
   const matchPct = (result.match_rate * 100).toFixed(1);
-  const matchColor = result.match_rate >= 0.9 ? "#16a34a" : result.match_rate >= 0.7 ? "#ca8a04" : "#dc2626";
+  const matchColor = result.match_rate >= 0.9 ? "var(--color-success)" : result.match_rate >= 0.7 ? "var(--color-warning)" : "var(--color-danger)";
 
   return (
     <div className="pds-spacing-mar-block-start-l">
@@ -360,20 +358,20 @@ function CrawlComparisonResults({ result }: { result: CompareResult }) {
         <StatCard label="Match Rate" value={`${matchPct}%`} color={matchColor} />
         <StatCard label="Site A Pages" value={result.site_a.total_pages.toString()} />
         <StatCard label="Site B Pages" value={result.site_b.total_pages.toString()} />
-        <StatCard label="Status Diffs" value={(result.status_diffs?.length || 0).toString()} color={result.status_diffs?.length ? "#dc2626" : "#16a34a"} />
-        <StatCard label="Only in A" value={(result.only_in_a?.length || 0).toString()} color={result.only_in_a?.length ? "#ca8a04" : "#16a34a"} />
-        <StatCard label="Only in B" value={(result.only_in_b?.length || 0).toString()} color={result.only_in_b?.length ? "#ca8a04" : "#16a34a"} />
+        <StatCard label="Status Diffs" value={(result.status_diffs?.length || 0).toString()} color={result.status_diffs?.length ? "var(--color-danger)" : "var(--color-success)"} />
+        <StatCard label="Only in A" value={(result.only_in_a?.length || 0).toString()} color={result.only_in_a?.length ? "var(--color-warning)" : "var(--color-success)"} />
+        <StatCard label="Only in B" value={(result.only_in_b?.length || 0).toString()} color={result.only_in_b?.length ? "var(--color-warning)" : "var(--color-success)"} />
       </div>
 
       {/* Status diffs */}
       {result.status_diffs && result.status_diffs.length > 0 && (
         <Panel className="pds-spacing-mar-block-end-l">
-          <h3 style={{ color: "#dc2626" }}>Status Code Differences</h3>
+          <h3 style={{ color: "var(--color-danger)" }}>Status Code Differences</h3>
           <table className="pds-table">
             <thead><tr><th>Path</th><th>Site A</th><th>Site B</th></tr></thead>
             <tbody>
               {result.status_diffs.map((d, i) => (
-                <tr key={i} style={{ backgroundColor: "#fef2f2" }}>
+                <tr key={i} style={{ backgroundColor: "var(--color-danger-light)" }}>
                   <td style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>{d.path}</td>
                   <td><StatusBadge code={d.status_code_a} /></td>
                   <td><StatusBadge code={d.status_code_b} /></td>
@@ -388,10 +386,10 @@ function CrawlComparisonResults({ result }: { result: CompareResult }) {
       {result.only_in_a && result.only_in_a.length > 0 && (
         <Panel className="pds-spacing-mar-block-end-l">
           <h3>Only in Site A ({result.only_in_a.length})</h3>
-          <p style={{ fontSize: "0.8rem", color: "#666" }}>Pages found in Site A but not in Site B. These may be missing after migration.</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>Pages found in Site A but not in Site B. These may be missing after migration.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
             {result.only_in_a.map((path, i) => (
-              <code key={i} style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem", background: "#fefce8", borderRadius: "4px" }}>{path}</code>
+              <code key={i} style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem", background: "var(--color-warning-bg)", borderRadius: "4px" }}>{path}</code>
             ))}
           </div>
         </Panel>
@@ -401,10 +399,10 @@ function CrawlComparisonResults({ result }: { result: CompareResult }) {
       {result.only_in_b && result.only_in_b.length > 0 && (
         <Panel className="pds-spacing-mar-block-end-l">
           <h3>Only in Site B ({result.only_in_b.length})</h3>
-          <p style={{ fontSize: "0.8rem", color: "#666" }}>Pages found in Site B but not in Site A. These may be new pages on the destination.</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>Pages found in Site B but not in Site A. These may be new pages on the destination.</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
             {result.only_in_b.map((path, i) => (
-              <code key={i} style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem", background: "#f0fdf4", borderRadius: "4px" }}>{path}</code>
+              <code key={i} style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem", background: "var(--color-success-light)", borderRadius: "4px" }}>{path}</code>
             ))}
           </div>
         </Panel>
@@ -418,7 +416,7 @@ function CrawlComparisonResults({ result }: { result: CompareResult }) {
             <thead><tr><th>Path</th><th>Site A</th><th>Site B</th><th>Match</th></tr></thead>
             <tbody>
               {result.matches.map((m, i) => (
-                <tr key={i} style={{ backgroundColor: m.match ? "#f0fdf4" : "#fefce8" }}>
+                <tr key={i} style={{ backgroundColor: m.match ? "var(--color-success-light)" : "var(--color-warning-bg)" }}>
                   <td style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>{m.path}</td>
                   <td><StatusBadge code={m.status_code_a} /></td>
                   <td><StatusBadge code={m.status_code_b} /></td>
@@ -430,7 +428,7 @@ function CrawlComparisonResults({ result }: { result: CompareResult }) {
         </Panel>
       )}
 
-      <p style={{ color: "#999", fontSize: "0.8rem", textAlign: "center" }}>
+      <p style={{ color: "var(--color-text-faint)", fontSize: "0.8rem", textAlign: "center" }}>
         Crawl completed in {result.duration_ms}ms
       </p>
     </div>
@@ -449,22 +447,22 @@ function Spinner({ message }: { message: string }) {
           </circle>
         </svg>
       </div>
-      <p style={{ color: "#666" }}>{message}</p>
+      <p style={{ color: "var(--color-text-secondary)" }}>{message}</p>
     </div>
   );
 }
 
 function StatusBadge({ code }: { code?: number }) {
   if (!code) return <span>{"\u2014"}</span>;
-  const color = code < 300 ? "#16a34a" : code < 400 ? "#ca8a04" : "#dc2626";
+  const color = code < 300 ? "var(--color-success)" : code < 400 ? "var(--color-warning)" : "var(--color-danger)";
   return <span style={{ color, fontWeight: 700, fontSize: "1.1rem" }}>{code}</span>;
 }
 
 function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ padding: "1rem", background: "#fff", borderRadius: "8px", border: "1px solid #e5e7eb", textAlign: "center" }}>
-      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: color || "#1a1a1a" }}>{value}</div>
-      <div style={{ fontSize: "0.8rem", color: "#666", marginTop: "0.25rem" }}>{label}</div>
+    <div style={{ padding: "1rem", background: "var(--color-bg)", borderRadius: "8px", border: "1px solid var(--color-border)", textAlign: "center" }}>
+      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: color || "var(--color-text)" }}>{value}</div>
+      <div style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)", marginTop: "0.25rem" }}>{label}</div>
     </div>
   );
 }
@@ -474,15 +472,15 @@ function InsightColumn({ label, insights, otherInsights, tag }: { label: string;
     <div>
       <h4 style={{ fontSize: "0.9rem", marginBottom: "0.5rem" }}>{label} ({insights.length})</h4>
       {insights.length === 0 ? (
-        <p style={{ color: "#999", fontSize: "0.85rem" }}>No insights</p>
+        <p style={{ color: "var(--color-text-faint)", fontSize: "0.85rem" }}>No insights</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
           {insights.map((insight, i) => {
             const inOther = otherInsights.some(o => o.category === insight.category && o.message === insight.message);
             return (
-              <div key={i} style={{ padding: "0.5rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", backgroundColor: inOther ? "#f0fdf4" : "#fefce8", borderLeft: `3px solid ${insight.severity === "error" ? "#dc2626" : insight.severity === "warning" ? "#ca8a04" : "#3b82f6"}` }}>
+              <div key={i} style={{ padding: "0.5rem 0.75rem", borderRadius: "4px", fontSize: "0.8rem", backgroundColor: inOther ? "var(--color-success-light)" : "var(--color-warning-bg)", borderLeft: `3px solid ${insight.severity === "error" ? "var(--color-danger)" : insight.severity === "warning" ? "var(--color-warning)" : "var(--color-info)"}` }}>
                 <strong>{insight.category.toUpperCase()}</strong> {"\u2014"} {insight.message}
-                {!inOther && <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", color: "#ca8a04", fontWeight: 600 }}>{tag}</span>}
+                {!inOther && <span style={{ marginLeft: "0.5rem", fontSize: "0.7rem", color: "var(--color-warning)", fontWeight: 600 }}>{tag}</span>}
               </div>
             );
           })}

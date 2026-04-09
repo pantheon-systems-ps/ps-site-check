@@ -39,10 +39,10 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  pass: "#16a34a",
-  warning: "#ca8a04",
-  fail: "#dc2626",
-  info: "#2563eb",
+  pass: "var(--color-success)",
+  warning: "var(--color-warning)",
+  fail: "var(--color-danger)",
+  info: "var(--color-info)",
 };
 
 const STATUS_ICONS: Record<string, string> = {
@@ -53,11 +53,11 @@ const STATUS_ICONS: Record<string, string> = {
 };
 
 function gradeColor(grade: string): string {
-  if (grade === "A") return "#16a34a";
-  if (grade === "B") return "#22c55e";
-  if (grade === "C") return "#ca8a04";
-  if (grade === "D") return "#ea580c";
-  return "#dc2626"; // F
+  if (grade === "A") return "var(--color-success)";
+  if (grade === "B") return "var(--color-success-soft)";
+  if (grade === "C") return "var(--color-warning)";
+  if (grade === "D") return "var(--color-warning-strong)";
+  return "var(--color-danger)"; // F
 }
 
 export default function Migration({ actionData }: Route.ComponentProps) {
@@ -68,12 +68,10 @@ export default function Migration({ actionData }: Route.ComponentProps) {
 
   return (
     <>
-      <h2>Pre-Migration Readiness Check</h2>
-      <Callout type="info" title="Migration Readiness" className="pds-spacing-mar-block-end-l">
-        <p>
-          Run automated checks to assess a domain's readiness for migration to Pantheon.
-        </p>
-      </Callout>
+      <h2>Migration Readiness</h2>
+      <p style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginBottom: "1rem" }}>
+        Assess how ready a domain is for migration to Pantheon. Checks DNS, TLS, CMS detection, and infrastructure compatibility.
+      </p>
 
       <Panel className="pds-spacing-mar-block-end-l">
         <Form method="post">
@@ -131,7 +129,7 @@ export default function Migration({ actionData }: Route.ComponentProps) {
               />
             </circle>
           </svg>
-          <p style={{ color: "#666" }}>Running migration checks...</p>
+          <p style={{ color: "var(--color-text-secondary)" }}>Running migration checks...</p>
         </div>
       )}
 
@@ -183,13 +181,13 @@ function MigrationResults({ result }: { result: MigrationReadiness }) {
               flexShrink: 0,
             }}
           >
-            <span style={{ fontSize: "2.5rem", fontWeight: 800, color: "#fff" }}>
+            <span style={{ fontSize: "2.5rem", fontWeight: 800, color: "var(--color-white)" }}>
               {result.grade}
             </span>
           </div>
           <div>
             <h3 style={{ margin: 0 }}>{result.domain}</h3>
-            <p style={{ margin: "0.25rem 0 0", color: "#666", fontSize: "0.9rem" }}>
+            <p style={{ margin: "0.25rem 0 0", color: "var(--color-text-secondary)", fontSize: "0.9rem" }}>
               Score: <strong style={{ color, fontSize: "1.1rem" }}>{result.score}%</strong>
             </p>
           </div>
@@ -201,7 +199,7 @@ function MigrationResults({ result }: { result: MigrationReadiness }) {
         <h3>Checklist</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {result.checks.map((check, i) => {
-            const statusColor = STATUS_COLORS[check.status] || "#666";
+            const statusColor = STATUS_COLORS[check.status] || "var(--color-text-secondary)";
             const icon = STATUS_ICONS[check.status] || "\u2014";
 
             return (
@@ -224,14 +222,14 @@ function MigrationResults({ result }: { result: MigrationReadiness }) {
                   <div style={{ fontWeight: 600, color: statusColor }}>
                     {check.name}
                   </div>
-                  <div style={{ fontSize: "0.85rem", color: "#555", marginTop: "0.15rem" }}>
+                  <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)", marginTop: "0.15rem" }}>
                     {check.description}
                   </div>
                   {check.detail && (
                     <div
                       style={{
                         fontSize: "0.8rem",
-                        color: "#888",
+                        color: "var(--color-text-muted)",
                         marginTop: "0.35rem",
                         fontFamily: "monospace",
                         wordBreak: "break-all",
@@ -248,7 +246,7 @@ function MigrationResults({ result }: { result: MigrationReadiness }) {
       </Panel>
 
       {/* Duration */}
-      <p style={{ color: "#888", fontSize: "0.85rem", textAlign: "right" }}>
+      <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem", textAlign: "right" }}>
         Completed in {result.duration_ms}ms
       </p>
 
@@ -258,25 +256,25 @@ function MigrationResults({ result }: { result: MigrationReadiness }) {
           <button onClick={analyzeMigration} style={{
             padding: "0.5rem 1.25rem", borderRadius: "6px", border: "1px solid #e5e7eb",
             background: "linear-gradient(135deg, #f0f0ff 0%, #fff 100%)",
-            cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "#4f46e5",
+            cursor: "pointer", fontSize: "0.85rem", fontWeight: 600, color: "var(--color-primary)",
           }}>
             Analyze with AI
           </button>
         )}
-        {aiLoading && <p style={{ color: "#666", fontSize: "0.85rem" }}>Analyzing with Claude Opus...</p>}
+        {aiLoading && <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>Analyzing with Claude Opus...</p>}
         {aiResult && !aiResult.error && (
-          <div style={{ textAlign: "left", padding: "1rem", background: "#f8f7ff", borderRadius: "8px", border: "1px solid #e0e0f0", marginTop: "0.5rem" }}>
-            <h4 style={{ margin: "0 0 0.5rem", color: "#4f46e5", fontSize: "0.95rem" }}>AI Migration Analysis</h4>
-            {aiResult.summary && <p style={{ fontSize: "0.9rem", color: "#333", lineHeight: 1.5 }}>{aiResult.summary}</p>}
+          <div style={{ textAlign: "left", padding: "1rem", background: "var(--color-ai-surface)", borderRadius: "8px", border: "1px solid var(--color-ai-border)", marginTop: "0.5rem" }}>
+            <h4 style={{ margin: "0 0 0.5rem", color: "var(--color-primary)", fontSize: "0.95rem" }}>AI Migration Analysis</h4>
+            {aiResult.summary && <p style={{ fontSize: "0.9rem", color: "var(--color-text)", lineHeight: 1.5 }}>{aiResult.summary}</p>}
             {aiResult.findings?.length > 0 && (
-              <ul style={{ fontSize: "0.85rem", color: "#444", lineHeight: 1.6 }}>
+              <ul style={{ fontSize: "0.85rem", color: "var(--color-text-body)", lineHeight: 1.6 }}>
                 {aiResult.findings.map((f: string, i: number) => <li key={i}>{f}</li>)}
               </ul>
             )}
             {aiResult.next_steps?.length > 0 && (
               <>
-                <h5 style={{ fontSize: "0.8rem", color: "#888", textTransform: "uppercase", margin: "0.5rem 0 0.25rem" }}>Recommended Steps</h5>
-                <ol style={{ fontSize: "0.85rem", color: "#444", lineHeight: 1.6 }}>
+                <h5 style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", textTransform: "uppercase", margin: "0.5rem 0 0.25rem" }}>Recommended Steps</h5>
+                <ol style={{ fontSize: "0.85rem", color: "var(--color-text-body)", lineHeight: 1.6 }}>
                   {aiResult.next_steps.map((s: string, i: number) => <li key={i}>{s}</li>)}
                 </ol>
               </>

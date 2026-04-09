@@ -116,22 +116,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 // -- Score color helpers --
 
 function scoreColor(score: number): string {
-  if (score >= 90) return "#0cce6b";
-  if (score >= 50) return "#ffa400";
-  return "#ff4e42";
+  if (score >= 90) return "var(--color-lh-good)";
+  if (score >= 50) return "var(--color-lh-needs-improvement)";
+  return "var(--color-lh-poor)";
 }
 
 function ratingColor(rating: string): string {
   switch (rating) {
     case "good":
-      return "#0cce6b";
+      return "var(--color-lh-good)";
     case "needs-improvement":
     case "needs improvement":
-      return "#ffa400";
+      return "var(--color-lh-needs-improvement)";
     case "poor":
-      return "#ff4e42";
+      return "var(--color-lh-poor)";
     default:
-      return "#888";
+      return "var(--color-text-muted)";
   }
 }
 
@@ -179,7 +179,7 @@ function CircularGauge({
           cy="50"
           r={radius}
           fill="none"
-          stroke="#e0e0e0"
+          stroke="var(--color-lh-track)"
           strokeWidth="6"
         />
         {/* Score arc */}
@@ -216,7 +216,7 @@ function CircularGauge({
         style={{
           fontSize: "0.8rem",
           fontWeight: 600,
-          color: "#444",
+          color: "var(--color-text-body)",
           textAlign: "center",
           lineHeight: 1.2,
         }}
@@ -253,23 +253,23 @@ function DistributionBar({
           height: "8px",
           borderRadius: "4px",
           overflow: "hidden",
-          backgroundColor: "#e0e0e0",
+          backgroundColor: "var(--color-lh-track)",
         }}
       >
         {goodPct > 0 && (
-          <div style={{ width: `${goodPct}%`, backgroundColor: "#0cce6b" }} />
+          <div style={{ width: `${goodPct}%`, backgroundColor: "var(--color-lh-good)" }} />
         )}
         {niPct > 0 && (
-          <div style={{ width: `${niPct}%`, backgroundColor: "#ffa400" }} />
+          <div style={{ width: `${niPct}%`, backgroundColor: "var(--color-lh-needs-improvement)" }} />
         )}
         {poorPct > 0 && (
-          <div style={{ width: `${poorPct}%`, backgroundColor: "#ff4e42" }} />
+          <div style={{ width: `${poorPct}%`, backgroundColor: "var(--color-lh-poor)" }} />
         )}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#666" }}>
-        <span style={{ color: "#0cce6b" }}>{goodPct.toFixed(0)}%</span>
-        <span style={{ color: "#ffa400" }}>{niPct.toFixed(0)}%</span>
-        <span style={{ color: "#ff4e42" }}>{poorPct.toFixed(0)}%</span>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--color-text-secondary)" }}>
+        <span style={{ color: "var(--color-lh-good)" }}>{goodPct.toFixed(0)}%</span>
+        <span style={{ color: "var(--color-lh-needs-improvement)" }}>{niPct.toFixed(0)}%</span>
+        <span style={{ color: "var(--color-lh-poor)" }}>{poorPct.toFixed(0)}%</span>
       </div>
     </div>
   );
@@ -394,8 +394,8 @@ export default function Lighthouse({ loaderData }: Route.ComponentProps) {
               </circle>
             </svg>
           </div>
-          <p style={{ color: "#666", fontWeight: 600 }}>Running Lighthouse audit...</p>
-          <p style={{ color: "#999", fontSize: "0.85rem" }}>
+          <p style={{ color: "var(--color-text-secondary)", fontWeight: 600 }}>Running Lighthouse audit...</p>
+          <p style={{ color: "var(--color-text-faint)", fontSize: "0.85rem" }}>
             This typically takes 15-30 seconds. The page loads and audits the
             site in a real Chromium browser.
           </p>
@@ -452,7 +452,7 @@ function LighthouseResults({
   return (
     <div className="pds-spacing-mar-block-start-l" style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       {/* Strategy + Duration */}
-      <p style={{ color: "#666", fontSize: "0.85rem", textAlign: "right", margin: 0 }}>
+      <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", textAlign: "right", margin: 0 }}>
         Strategy: <strong>{lighthouse.strategy}</strong> &middot; Completed in{" "}
         <strong>{(lighthouse.duration_ms / 1000).toFixed(1)}s</strong>
       </p>
@@ -480,21 +480,21 @@ function LighthouseResults({
             justifyContent: "center",
             gap: "1.5rem",
             fontSize: "0.75rem",
-            color: "#888",
+            color: "var(--color-text-muted)",
             borderTop: "1px solid #eee",
             paddingTop: "0.75rem",
           }}
         >
           <span>
-            <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#0cce6b", marginRight: "0.35rem", verticalAlign: "middle" }} />
+            <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "var(--color-lh-good)", marginRight: "0.35rem", verticalAlign: "middle" }} />
             90-100
           </span>
           <span>
-            <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#ffa400", marginRight: "0.35rem", verticalAlign: "middle" }} />
+            <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "var(--color-lh-needs-improvement)", marginRight: "0.35rem", verticalAlign: "middle" }} />
             50-89
           </span>
           <span>
-            <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "#ff4e42", marginRight: "0.35rem", verticalAlign: "middle" }} />
+            <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", backgroundColor: "var(--color-lh-poor)", marginRight: "0.35rem", verticalAlign: "middle" }} />
             0-49
           </span>
         </div>
@@ -527,7 +527,7 @@ function LighthouseResults({
       {crux && cruxMetrics.some((m) => m.metric) && (
         <Panel>
           <h3>CrUX Real User Data</h3>
-          <p style={{ color: "#666", fontSize: "0.85rem" }}>
+          <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
             Chrome User Experience Report (CrUX) field data for{" "}
             <strong>{crux.origin}</strong>
             {crux.form_factor && <> &middot; Form factor: <strong>{crux.form_factor}</strong></>}
@@ -560,7 +560,7 @@ function LighthouseResults({
                           borderRadius: "999px",
                           fontSize: "0.75rem",
                           fontWeight: 600,
-                          color: "#fff",
+                          color: "var(--color-white)",
                           backgroundColor: ratingColor(m.metric.rating),
                         }}
                       >

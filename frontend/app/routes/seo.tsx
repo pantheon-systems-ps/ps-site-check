@@ -59,15 +59,15 @@ export async function loader({ request }: Route.LoaderArgs) {
 // -- Score helpers --
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "#16a34a";
-  if (score >= 50) return "#ca8a04";
-  return "#dc2626";
+  if (score >= 80) return "var(--color-success)";
+  if (score >= 50) return "var(--color-warning)";
+  return "var(--color-danger)";
 }
 
 function ratingColor(rating: string): string {
-  if (rating === "good" || rating === "optimal") return "#16a34a";
-  if (rating === "warning" || rating === "acceptable") return "#ca8a04";
-  return "#dc2626";
+  if (rating === "good" || rating === "optimal") return "var(--color-success)";
+  if (rating === "warning" || rating === "acceptable") return "var(--color-warning)";
+  return "var(--color-danger)";
 }
 
 // -- Main component --
@@ -130,7 +130,7 @@ export default function SEO({ loaderData }: Route.ComponentProps) {
               </circle>
             </svg>
           </div>
-          <p style={{ color: "#666" }}>Running SEO audit...</p>
+          <p style={{ color: "var(--color-text-secondary)" }}>Running SEO audit...</p>
         </div>
       )}
 
@@ -158,7 +158,7 @@ function AuditResults({ audit }: { audit: SEOAudit }) {
           <ScoreCircle score={audit.score} color={color} />
           <div>
             <h3 style={{ margin: 0 }}>SEO Score</h3>
-            <p style={{ color: "#666", fontSize: "0.85rem", margin: "0.25rem 0 0" }}>
+            <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem", margin: "0.25rem 0 0" }}>
               Audited <strong>{audit.url}</strong> in {audit.duration_ms}ms
             </p>
             <p style={{ margin: "0.25rem 0 0" }}>
@@ -218,7 +218,7 @@ function ScoreCircle({ score, color }: { score: number; color: string }) {
       <svg viewBox="0 0 100 100" width="100" height="100">
         <circle
           cx="50" cy="50" r={radius}
-          fill="none" stroke="#e5e7eb" strokeWidth="8"
+          fill="none" stroke="var(--color-border)" strokeWidth="8"
         />
         <circle
           cx="50" cy="50" r={radius}
@@ -355,7 +355,7 @@ function ContentTab({ audit }: { audit: SEOAudit }) {
             <tr>
               <td style={{ fontWeight: 600 }}>H1</td>
               <td>
-                <span style={{ color: headings.h1_count === 1 ? "#16a34a" : headings.h1_count === 0 ? "#dc2626" : "#ca8a04", fontWeight: 700 }}>
+                <span style={{ color: headings.h1_count === 1 ? "var(--color-success)" : headings.h1_count === 0 ? "var(--color-danger)" : "var(--color-warning)", fontWeight: 700 }}>
                   {headings.h1_count}
                 </span>
               </td>
@@ -368,12 +368,12 @@ function ContentTab({ audit }: { audit: SEOAudit }) {
             <tr>
               <td style={{ fontWeight: 600 }}>H2</td>
               <td>{headings.h2_count}</td>
-              <td style={{ fontSize: "0.85rem", color: "#666" }}>\u2014</td>
+              <td style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>\u2014</td>
             </tr>
             <tr>
               <td style={{ fontWeight: 600 }}>H3</td>
               <td>{headings.h3_count}</td>
-              <td style={{ fontSize: "0.85rem", color: "#666" }}>\u2014</td>
+              <td style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>\u2014</td>
             </tr>
           </tbody>
         </table>
@@ -399,11 +399,11 @@ function ContentTab({ audit }: { audit: SEOAudit }) {
             </tr>
             <tr>
               <td style={{ fontWeight: 600 }}>With Alt Text</td>
-              <td style={{ color: "#16a34a" }}>{images.with_alt}</td>
+              <td style={{ color: "var(--color-success)" }}>{images.with_alt}</td>
             </tr>
             <tr>
               <td style={{ fontWeight: 600 }}>Without Alt Text</td>
-              <td style={{ color: images.without_alt > 0 ? "#dc2626" : "#16a34a" }}>{images.without_alt}</td>
+              <td style={{ color: images.without_alt > 0 ? "var(--color-danger)" : "var(--color-success)" }}>{images.without_alt}</td>
             </tr>
             <tr>
               <td style={{ fontWeight: 600 }}>Rating</td>
@@ -414,12 +414,12 @@ function ContentTab({ audit }: { audit: SEOAudit }) {
         {images.total > 0 && (
           <div style={{ marginTop: "0.75rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <div style={{ flex: 1, height: "8px", backgroundColor: "#e5e7eb", borderRadius: "4px", overflow: "hidden" }}>
+              <div style={{ flex: 1, height: "8px", backgroundColor: "var(--color-border)", borderRadius: "4px", overflow: "hidden" }}>
                 <div
                   style={{
                     width: `${altPercent}%`,
                     height: "100%",
-                    backgroundColor: altPercent === 100 ? "#16a34a" : altPercent >= 80 ? "#ca8a04" : "#dc2626",
+                    backgroundColor: altPercent === 100 ? "var(--color-success)" : altPercent >= 80 ? "var(--color-warning)" : "var(--color-danger)",
                     borderRadius: "4px",
                     transition: "width 0.3s ease",
                   }}
@@ -479,7 +479,7 @@ function ContentTab({ audit }: { audit: SEOAudit }) {
             </tbody>
           </table>
         ) : (
-          <p style={{ color: "#666", fontSize: "0.85rem" }}>No hreflang tags found.</p>
+          <p style={{ color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>No hreflang tags found.</p>
         )}
       </Panel>
     </div>
@@ -589,7 +589,7 @@ function TechnicalTab({ audit }: { audit: SEOAudit }) {
               <tbody>
                 {mixed_content.map((url, i) => (
                   <tr key={i}>
-                    <td style={{ width: "50px", color: "#999" }}>{i + 1}</td>
+                    <td style={{ width: "50px", color: "var(--color-text-faint)" }}>{i + 1}</td>
                     <td style={{ wordBreak: "break-all", fontSize: "0.85rem" }}>
                       <code>{url}</code>
                     </td>
@@ -690,8 +690,8 @@ function StatusBadge({ found }: { found: boolean }) {
         borderRadius: "999px",
         fontSize: "0.75rem",
         fontWeight: 600,
-        color: "#fff",
-        backgroundColor: found ? "#16a34a" : "#dc2626",
+        color: "var(--color-white)",
+        backgroundColor: found ? "var(--color-success)" : "var(--color-danger)",
       }}
     >
       {found ? "Found" : "Not Found"}
@@ -709,7 +709,7 @@ function RatingBadge({ rating }: { rating: string }) {
         borderRadius: "999px",
         fontSize: "0.75rem",
         fontWeight: 600,
-        color: "#fff",
+        color: "var(--color-white)",
         backgroundColor: color,
       }}
     >

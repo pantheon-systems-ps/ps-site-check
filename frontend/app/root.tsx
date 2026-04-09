@@ -17,8 +17,8 @@ import "./app.css";
 
 export const meta: Route.MetaFunction = () => {
   return [
-    { title: "Site Check - Pantheon" },
-    { name: "description", content: "DNS, HTTP, TLS, security, SEO, and performance analysis for Pantheon sites" },
+    { title: "Pantheon Site Check — Free Website Audit" },
+    { name: "description", content: "Free comprehensive website audit — DNS, security, TLS, SEO, performance, and AI-powered insights. Powered by Pantheon Professional Services." },
   ];
 };
 
@@ -34,9 +34,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+          <a href="#main-content" className="skip-nav">Skip to main content</a>
           <GlobalWrapper>
             <AppNavbar />
-            <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "1.5rem 2rem", flex: 1 }}>
+            <main id="main-content" style={{ maxWidth: "1400px", margin: "0 auto", padding: "1.5rem 2rem", flex: 1 }}>
               {children}
             </main>
             <SiteFooter containerWidth="full" />
