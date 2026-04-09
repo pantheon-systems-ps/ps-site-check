@@ -209,21 +209,38 @@ export async function loader({ request }: Route.LoaderArgs) {
   const customHeaders = params.get("custom_headers") || "";
 
   try {
-    // Use /v1/check when custom headers are provided
-    const useV1 = !!customHeaders.trim();
-    const apiURL = new URL(`${SITE_CHECK_API}${useV1 ? "/v1/check" : "/check"}`);
+    // Parse custom headers (Name: value, one per line)
+    const parsedHeaders: Record<string, string> = {};
+    if (customHeaders.trim()) {
+      for (const line of customHeaders.split("\n")) {
+        const colonIdx = line.indexOf(":");
+        if (colonIdx > 0) {
+          const name = line.slice(0, colonIdx).trim();
+          const value = line.slice(colonIdx + 1).trim();
+          if (name && value) parsedHeaders[name] = value;
+        }
+      }
+    }
+    const hasCustomHeaders = Object.keys(parsedHeaders).length > 0;
 
-    if (useV1) {
-      apiURL.searchParams.set("sc__url", url);
-      if (double) apiURL.searchParams.set("sc__double", "true");
-      if (follow) apiURL.searchParams.set("sc__follow", "true");
-      if (resolve) apiURL.searchParams.set("sc__resolve", resolve);
-      if (debug) apiURL.searchParams.set("sc__debug", "true");
-      if (fdebug) apiURL.searchParams.set("sc__fdebug", "true");
-      if (warmup >= 2) apiURL.searchParams.set("sc__warmup", String(warmup));
-      if (clientIp) apiURL.searchParams.set("sc__client_ip", clientIp);
-      if (userAgent) apiURL.searchParams.set("sc__user_agent", userAgent);
+    let checkResp: Response;
+
+    if (hasCustomHeaders) {
+      // POST /v1/check — JSON body with headers forwarding
+      checkResp = await fetch(`${SITE_CHECK_API}/v1/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url, follow, double, resolve,
+          debug, fdebug, warmup,
+          client_ip: clientIp,
+          user_agent: userAgent,
+          headers: parsedHeaders,
+        }),
+      });
     } else {
+      // GET /check — standard query string
+      const apiURL = new URL(`${SITE_CHECK_API}/check`);
       apiURL.searchParams.set("url", url);
       if (double) apiURL.searchParams.set("double", "true");
       if (follow) apiURL.searchParams.set("follow", "true");
@@ -233,26 +250,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       if (warmup >= 2) apiURL.searchParams.set("warmup", String(warmup));
       if (clientIp) apiURL.searchParams.set("client_ip", clientIp);
       if (userAgent) apiURL.searchParams.set("user_agent", userAgent);
+      checkResp = await fetch(apiURL.toString());
     }
-
-    // Build fetch options — forward custom headers for v1
-    const fetchOpts: RequestInit = {};
-    if (useV1 && customHeaders.trim()) {
-      const headers: Record<string, string> = {};
-      for (const line of customHeaders.split("\n")) {
-        const colonIdx = line.indexOf(":");
-        if (colonIdx > 0) {
-          const name = line.slice(0, colonIdx).trim();
-          const value = line.slice(colonIdx + 1).trim();
-          if (name && value) headers[name] = value;
-        }
-      }
-      fetchOpts.headers = headers;
-    }
-
-    // Server-side: only fetch the core check (fast ~300ms)
-    // SEO, Lighthouse, Subdomains load client-side on demand
-    const checkResp = await fetch(apiURL.toString(), fetchOpts);
 
     if (!checkResp.ok) {
       return { result: null, error: `API returned ${checkResp.status}`, options: null };

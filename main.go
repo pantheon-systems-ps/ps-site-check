@@ -7,10 +7,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -95,7 +93,7 @@ func main() {
 	mux.HandleFunc("GET /agcdn-probe", withMiddleware(handleAGCDNProbe))
 	mux.HandleFunc("GET /bot-protection", withMiddleware(handleBotProtection))
 	mux.HandleFunc("GET /resources", withMiddleware(handleResources))
-	mux.HandleFunc("GET /v1/check", withMiddleware(handleCheckV1))
+	mux.HandleFunc("POST /v1/check", withMiddleware(handleCheckV1))
 	mux.HandleFunc("GET /result/{id}", handleResult)
 	mux.HandleFunc("GET /analytics", handleAnalytics)
 	mux.HandleFunc("GET /health", handleHealth)
@@ -223,21 +221,41 @@ func handleCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func handleCheckV1(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+// checkV1Request is the JSON body for POST /v1/check.
+type checkV1Request struct {
+	URL             string            `json:"url"`
+	Resolve         string            `json:"resolve,omitempty"`
+	Debug           *bool             `json:"debug,omitempty"`
+	FastlyDebug     *bool             `json:"fdebug,omitempty"`
+	Double          bool              `json:"double,omitempty"`
+	Follow          bool              `json:"follow,omitempty"`
+	ClientIP        string            `json:"client_ip,omitempty"`
+	UserAgent       string            `json:"user_agent,omitempty"`
+	Warmup          int               `json:"warmup,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+}
 
-	// --- Parse sc__ prefixed control params ---
-	rawURL := q.Get("sc__url")
-	if rawURL == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "missing required parameter: sc__url",
-		})
+func handleCheckV1(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20)) // 1MB max
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
 		return
 	}
 
-	resolve := q.Get("sc__resolve")
-	if resolve != "" {
-		if errMsg := checker.ValidateResolveIP(resolve); errMsg != "" {
+	var req checkV1Request
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	if req.URL == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing required field: url"})
+		return
+	}
+
+	// Validate resolve IP (SSRF prevention)
+	if req.Resolve != "" {
+		if errMsg := checker.ValidateResolveIP(req.Resolve); errMsg != "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": errMsg})
 			return
 		}
@@ -245,84 +263,43 @@ func handleCheckV1(w http.ResponseWriter, r *http.Request) {
 
 	// Debug headers: default to true when neither is specified
 	pantheonDebug, fastlyDebug := true, true
-	if q.Has("sc__debug") || q.Has("sc__fdebug") {
-		pantheonDebug = q.Get("sc__debug") == "true"
-		fastlyDebug = q.Get("sc__fdebug") == "true"
+	if req.Debug != nil || req.FastlyDebug != nil {
+		if req.Debug != nil {
+			pantheonDebug = *req.Debug
+		} else {
+			pantheonDebug = false
+		}
+		if req.FastlyDebug != nil {
+			fastlyDebug = *req.FastlyDebug
+		} else {
+			fastlyDebug = false
+		}
 	}
 
 	warmup := 0
-	if w := q.Get("sc__warmup"); w != "" {
-		if n, err := strconv.Atoi(w); err == nil && n >= 2 && n <= 20 {
-			warmup = n
-		}
+	if req.Warmup >= 2 && req.Warmup <= 20 {
+		warmup = req.Warmup
 	}
 
-	// --- Collect non-sc__ query params as TargetQuery ---
-	targetQuery := url.Values{}
-	for key, values := range q {
-		if strings.HasPrefix(key, "sco__") {
-			// Strip sco__ prefix — escape hatch for reserved name collisions
-			stripped := strings.TrimPrefix(key, "sco__")
-			for _, v := range values {
-				targetQuery.Add(stripped, v)
-			}
-		} else if !strings.HasPrefix(key, "sc__") {
-			// Forward non-control params as-is
-			for _, v := range values {
-				targetQuery.Add(key, v)
-			}
-		}
-	}
-
-	// --- Collect non-reserved request headers as TargetHeaders ---
-	reservedHeaders := map[string]bool{
-		"Host":            true,
-		"X-Api-Key":       true,
-		"Sc-Api-Key":      true,
-		"Connection":      true,
-		"Content-Length":   true,
-		"Accept-Encoding": true,
-	}
-
+	// Convert headers map to http.Header for forwarding
 	targetHeaders := http.Header{}
-	for name, values := range r.Header {
-		canonical := http.CanonicalHeaderKey(name)
-
-		// Skip reserved headers
-		if reservedHeaders[canonical] {
-			continue
-		}
-
-		if strings.HasPrefix(canonical, "Sco-") {
-			// Strip Sco- prefix — escape hatch for reserved header collisions
-			stripped := strings.TrimPrefix(canonical, "Sco-")
-			for _, v := range values {
-				targetHeaders.Add(stripped, v)
-			}
-		} else if strings.HasPrefix(canonical, "Sc-") {
-			// Sc- prefixed headers are API control — skip
-			continue
-		} else {
-			for _, v := range values {
-				targetHeaders.Add(canonical, v)
-			}
-		}
+	for name, value := range req.Headers {
+		targetHeaders.Set(name, value)
 	}
 
 	opts := checker.Options{
-		DoubleRequest:   q.Get("sc__double") == "true",
-		FollowRedirects: q.Get("sc__follow") == "true",
-		ResolveIP:       resolve,
+		DoubleRequest:   req.Double,
+		FollowRedirects: req.Follow,
+		ResolveIP:       req.Resolve,
 		PantheonDebug:   pantheonDebug,
 		FastlyDebug:     fastlyDebug,
-		ClientIP:        q.Get("sc__client_ip"),
-		UserAgent:       q.Get("sc__user_agent"),
+		ClientIP:        req.ClientIP,
+		UserAgent:       req.UserAgent,
 		WarmupRequests:  warmup,
-		TargetQuery:     targetQuery,
 		TargetHeaders:   targetHeaders,
 	}
 
-	result := checker.Run(rawURL, opts)
+	result := checker.Run(req.URL, opts)
 	cacheResult(result)
 	writeJSON(w, http.StatusOK, result)
 }
