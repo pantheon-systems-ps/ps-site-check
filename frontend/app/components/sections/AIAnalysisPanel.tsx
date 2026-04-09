@@ -4,6 +4,7 @@ import type { SiteCheckResult } from "~/types/site-check";
 import Badge from "~/components/ui/Badge";
 import RenderMarkdown from "~/components/ui/RenderMarkdown";
 import { CLIENT_API } from "~/lib/constants";
+import ProServicesCTA from "~/components/ProServicesCTA";
 
 type AIAnalysis = {
   summary: string;
@@ -177,7 +178,8 @@ export default function AIAnalysisPanel({ result, seo, lighthouse }: { result: S
       )}
 
       {/* Re-analyze with different model */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: `1px solid var(--color-ai-border)` }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.75rem", paddingTop: "0.5rem", borderTop: `1px solid var(--color-ai-border)` }}>
+        <ProServicesCTA variant="compact" />
         <button
           onClick={handleAnalyze}
           disabled={loading}

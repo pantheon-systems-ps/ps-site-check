@@ -237,7 +237,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
               />
             </div>
             <div style={{ minWidth: "180px" }}>
-              <label htmlFor="resolve-select" style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }}>
+              <label htmlFor="resolve-select" style={{ display: "block", fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.25rem" }} title="Override DNS resolution to test against a specific server IP">
                 Resolve Target
               </label>
               <select id="resolve-select" name="resolve" className="pds-input"
@@ -255,13 +255,13 @@ export default function Check({ loaderData }: Route.ComponentProps) {
             <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
               <input type="checkbox" name="follow" value="true" defaultChecked /> Follow redirects
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Send a second request after 2s to verify caching behavior">
               <input type="checkbox" name="double" value="true" /> Cache test
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Pantheon-Debug: 1">
+            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Send Pantheon-Debug: 1 header to reveal platform details (site UUID, environment, PHP version)">
               <input type="checkbox" name="debug" value="true" defaultChecked={options ? options.debug : true} /> Pantheon Debug
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Fastly-Debug: 1">
+            <label style={{ display: "flex", alignItems: "center", gap: "0.3rem" }} title="Send Fastly-Debug: 1 header to reveal CDN cache state, POP, and timing details">
               <input type="checkbox" name="fdebug" value="true" defaultChecked={options ? options.fdebug : true} /> Fastly Debug
             </label>
           </div>
@@ -273,7 +273,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
             </summary>
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end", flexWrap: "wrap", marginTop: "0.5rem", padding: "0.75rem", background: "var(--color-surface)", borderRadius: "6px" }}>
               <div style={{ minWidth: "100px", maxWidth: "130px" }}>
-                <label htmlFor="warmup-input" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }}>
+                <label htmlFor="warmup-input" style={{ display: "block", fontWeight: 600, fontSize: "0.8rem", marginBottom: "0.25rem" }} title="Number of sequential requests to send before the main check — tests cache warm-up behavior">
                   Warmup
                 </label>
                 <input id="warmup-input" name="warmup" type="number" min="0" max="20" placeholder="0"
@@ -303,7 +303,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
       </Panel>
 
       {isChecking && (
-        <div style={{ textAlign: "center", padding: "2rem" }}>
+        <div className="loading-center">
           <div style={{ margin: "0 auto 1rem" }}>
             <svg viewBox="0 0 50 50" width="40" height="40">
               <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" strokeWidth="4" strokeDasharray="90 60" strokeLinecap="round">
@@ -311,7 +311,7 @@ export default function Check({ loaderData }: Route.ComponentProps) {
               </circle>
             </svg>
           </div>
-          <p style={{ color: "var(--color-text-secondary)" }}>Checking site...</p>
+          <p>Checking site...</p>
         </div>
       )}
 
@@ -325,15 +325,13 @@ export default function Check({ loaderData }: Route.ComponentProps) {
 
       {/* Landing page when no check has been run */}
       {!result && !isChecking && !error && (
-        <div style={{ maxWidth: "640px", margin: "0 auto", padding: "1.5rem 0" }}>
-          <h2 style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--color-text)", marginBottom: "0.5rem", lineHeight: 1.3 }}>
-            How healthy is your website?
-          </h2>
-          <p style={{ fontSize: "0.9rem", color: "var(--color-text-secondary)", lineHeight: 1.6, marginBottom: "2rem" }}>
+        <div className="landing">
+          <h2>How healthy is your website?</h2>
+          <p>
             Get a comprehensive audit in seconds — DNS, security headers, TLS, SEO, performance, and email authentication analyzed in one check.
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "2rem" }}>
+          <div className="landing-features">
             {[
               {
                 title: "Security & Infrastructure",
@@ -364,15 +362,15 @@ export default function Check({ loaderData }: Route.ComponentProps) {
                 ),
               },
             ].map((item, i) => (
-              <div key={i} style={{ padding: "1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--color-border)", background: "var(--color-bg)" }}>
-                <div style={{ marginBottom: "0.5rem" }}>{item.icon}</div>
-                <div style={{ fontWeight: 600, fontSize: "0.82rem", color: "var(--color-text)", marginBottom: "0.25rem" }}>{item.title}</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", lineHeight: 1.5 }}>{item.desc}</div>
+              <div key={i} className="landing-feature">
+                <div className="landing-feature__icon">{item.icon}</div>
+                <div className="landing-feature__title">{item.title}</div>
+                <div className="landing-feature__desc">{item.desc}</div>
               </div>
             ))}
           </div>
 
-          <p style={{ fontSize: "0.75rem", color: "var(--color-text-faint)", textAlign: "center" }}>
+          <p className="landing-footer">
             Free and open to everyone. Powered by Pantheon.
           </p>
         </div>
@@ -455,24 +453,29 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
   return (
     <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       {/* ── Score Dashboard ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "0.5rem" }}>
+      <div className="score-dashboard">
         {[
-          { label: "HTTP", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "var(--color-success)" : result.http?.status_code && result.http.status_code < 400 ? "var(--color-warning)" : "var(--color-danger)" },
-          { label: "Security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "var(--color-text-muted)" },
-          { label: "SEO", value: seo?.score ?? (seoLoading ? "\u2026" : "\u2014"), color: seo ? scoreColor(seo.score) : "var(--color-text-muted)" },
-          { label: "Performance", value: lighthouse?.performance ?? (lhLoading ? "\u2026" : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "var(--color-text-muted)" },
-          { label: "Email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "var(--color-text-muted)" },
-          { label: "Pantheon", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "var(--color-primary)" : "var(--color-text-muted)" },
+          { label: "HTTP", target: "sec-response", value: result.http?.status_code || "\u2014", color: result.http?.status_code && result.http.status_code < 300 ? "var(--color-success)" : result.http?.status_code && result.http.status_code < 400 ? "var(--color-warning)" : "var(--color-danger)" },
+          { label: "Security", target: "sec-security", value: result.security?.grade || "\u2014", color: result.security ? gradeColor(result.security.grade) : "var(--color-text-muted)" },
+          { label: "SEO", target: "sec-seo", value: seo?.score ?? (seoLoading ? "\u2026" : "\u2014"), color: seo ? scoreColor(seo.score) : "var(--color-text-muted)" },
+          { label: "Performance", target: "sec-perf", value: lighthouse?.performance ?? (lhLoading ? "\u2026" : "\u2014"), color: lighthouse?.performance ? scoreColor(lighthouse.performance) : "var(--color-text-muted)" },
+          { label: "Email", target: "sec-email", value: result.email_auth?.grade || "\u2014", color: result.email_auth ? gradeColor(result.email_auth.grade) : "var(--color-text-muted)" },
+          { label: "Pantheon", target: "sec-infra", value: pantheon.isPantheon ? "\u2713" : "\u2717", color: pantheon.isPantheon ? "var(--color-primary)" : "var(--color-text-muted)" },
         ].map((s, i) => (
-          <div key={i} className="score-card">
+          <button
+            key={i}
+            className="score-card"
+            onClick={() => document.getElementById(s.target)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            aria-label={`Jump to ${s.label} section`}
+          >
             <div className="score-card__value" style={{ color: s.color }}>{s.value}</div>
             <div className="score-card__label">{s.label}</div>
-          </div>
+          </button>
         ))}
       </div>
 
       {/* ── Context line ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem", color: "var(--color-text-muted)", padding: "0 0.25rem" }}>
+      <div className="context-line">
         <span>
           <strong style={{ color: "var(--color-text-secondary)" }}>{result.url}</strong>
           <span style={{ margin: "0 0.3rem" }}>&middot;</span>{result.duration_ms}ms
@@ -520,7 +523,9 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
       )}
 
       {/* ── AI Analysis ── */}
-      <AIAnalysisPanel result={result} seo={seo} lighthouse={lighthouse} />
+      <div id="ai-analysis">
+        <AIAnalysisPanel result={result} seo={seo} lighthouse={lighthouse} />
+      </div>
 
       {/* ── Login nudge ── */}
       <ProServicesCTA variant="inline" />
@@ -580,9 +585,7 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
 
       {/* ── Advanced Tools (grouped) ── */}
       <div style={{ marginTop: "0.5rem" }}>
-        <div style={{ fontSize: "0.65rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)", marginBottom: "0.4rem", paddingLeft: "0.25rem" }}>
-          Advanced Tools
-        </div>
+        <div className="section-group-label">Advanced Tools</div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <SectionCard id="sec-subdomains" title="Subdomains"
             score={subdomains?.count ? { value: subdomains.count, color: "var(--color-text-secondary)" } : undefined}
@@ -621,6 +624,31 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
             <ResourceAuditTab url={result.url} />
           </SectionCard>
         </div>
+      </div>
+
+      {/* ── Bottom AI trigger ── */}
+      <div style={{ textAlign: "center", padding: "0.75rem 0" }}>
+        <button
+          onClick={() => {
+            const el = document.getElementById("ai-analysis");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: "0.4rem",
+            padding: "0.5rem 1rem", borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--color-ai-border)", background: "var(--color-ai-surface)",
+            cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, color: "var(--color-primary)",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5v1h-4v-1C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z"/>
+            <path d="M10 14h4"/><path d="M10 18h4"/><path d="M11 22h2"/>
+          </svg>
+          Analyze with AI
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+        </button>
       </div>
 
       {/* ── Professional Services CTA ── */}
