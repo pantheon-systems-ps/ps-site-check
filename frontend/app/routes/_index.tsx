@@ -775,8 +775,6 @@ function CheckResults({ result, options }: { result: SiteCheckResult; options?: 
         <AIAnalysisPanel result={result} seo={seo} lighthouse={lighthouse} />
       </div>
 
-      {/* ── Login nudge ── */}
-      <ProServicesCTA variant="inline" />
 
       {/* ── Sections ── */}
 
